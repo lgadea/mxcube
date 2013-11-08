@@ -187,7 +187,7 @@ class ShapeHistory(HardwareObject):
 
     def _delete_shape(self, shape):
         shape.unhighlight()
-        
+  
         if shape in self.selected_shapes:
             del self.selected_shapes[shape]
 
@@ -207,8 +207,25 @@ class ShapeHistory(HardwareObject):
         :param shape: The shape to remove
         :type shape: Shape object.
         """
+        related_points = []
+        
+        #If a point remove related line first
+        if isinstance(shape, Point):
+            for s in self.get_shapes():
+                if isinstance(s, Line):
+                    for s_qub_obj in s.get_qub_objects():
+                        if  s_qub_obj in shape.get_qub_objects():
+                            self._delete_shape(s)
+                            related_points.append(s)
+                            break
+
         self._delete_shape(shape)
         del self.shapes[shape]
+
+        # Delete the related shapes after self._delete_shapes so that
+        # related object still exists when calling delete call back.
+        for point in related_points:
+            del self.shapes[point]
 
     def move_shape(self, shape, new_positions):
         """
@@ -249,6 +266,15 @@ class ShapeHistory(HardwareObject):
         grid_dict = dict()
         dispatcher.send("grid", self, grid_dict)
         return grid_dict
+
+    def select_shape(self, shape):
+        """
+        Select the shape <shape> (programmatically).
+
+        :param shape: The shape to select.
+        :type shape: Shape
+        """
+        self._drawing_event.set_selected(shape, call_cb = False)
 
 class DrawingEvent(QubDrawingEvent):
     """

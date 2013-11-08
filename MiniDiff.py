@@ -168,6 +168,8 @@ class MiniDiff(Equipment):
         self.sampleXMotor = self.getDeviceByRole('sampx')
         self.sampleYMotor = self.getDeviceByRole('sampy')
         self.camera = self.getDeviceByRole('camera')
+        self.kappaMotor = self.getDeviceByRole('kappa')
+        self.kappaPhiMotor = self.getDeviceByRole('kappa_phi')
 
         self.camera.addChannel({ 'type': 'tango', 'name': 'jpegImage' }, "JpegImage")
 
@@ -775,8 +777,9 @@ class MiniDiff(Equipment):
 
             motors = {}
             motor_pos = self.currentCentringProcedure.get()
-            for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi'):
+            for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi', 'focus', 'kappa', 'kappa_phi'):
                 mot_obj = self.getDeviceByRole(motor_role)
+
                 try:
                     motors[motor_role] = motor_pos[mot_obj] 
                 except KeyError:
@@ -808,7 +811,10 @@ class MiniDiff(Equipment):
                "phiy": self.phiyMotor.getPosition(),
                "phiz": self.phizMotor.getPosition(),
                "sampx": self.sampleXMotor.getPosition(),
-               "sampy": self.sampleYMotor.getPosition() }
+               "sampy": self.sampleYMotor.getPosition(),
+               "kappa": self.kappaMotor.getPosition(),
+               "kappa_phi": self.kappaPhiMotor.getPosition(),
+               "zoom": self.zoomMotor.getPosition()}
     
 
     def takeSnapshots(self, wait=False):
@@ -844,7 +850,7 @@ class MiniDiff(Equipment):
            self.emit('centringSnapshots', (True,))
            self.emitProgressMessage("")
         self.emitProgressMessage("Sample is centred!")
-        self.emit('centringAccepted', (True,self.getCentringStatus()))
+        #self.emit('centringAccepted', (True,self.getCentringStatus()))
 
 
 
