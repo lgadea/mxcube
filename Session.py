@@ -9,15 +9,6 @@ import time
 
 from HardwareRepository.BaseHardwareObjects import HardwareObject
 
-__author__ = "Marcus Oskarsson"
-__copyright__ = "Copyright 2012, ESRF"
-__credits__ = ["My great coleagues", "The MxCuBE colaboration"]
-
-__version__ = "0.1"
-__maintainer__ = "Marcus Oskarsson"
-__email__ = "marcus.oscarsson@esrf.fr"
-__status__ = "Beta"
-
 
 class Session(HardwareObject):
     def __init__(self, name):
@@ -28,6 +19,8 @@ class Session(HardwareObject):
         self.proposal_id = None
         self.in_house_users = []
         self.endstation_name = None
+        self.session_start_date = None
+        self.user_group = ''
 
         self.default_precision = '04'
         self.suffix = None
@@ -71,20 +64,21 @@ class Session(HardwareObject):
         user_category = ''
         directory = ''
 
+        if self.session_start_date:
+            start_time = self.session_start_date.split(' ')[0].replace('-', '')
+        else:
+            start_time = time.strftime("%Y%m%d")
+
         if self.is_inhouse():
             user_category = 'inhouse'
-            directory = os.path.join(self.base_directory,
-                                     self.endstation_name,
-                                     user_category,
-                                     self.get_proposal(),
-                                     time.strftime("%Y%m%d"))
+            directory = os.path.join(self.base_directory, self.endstation_name,
+                                     user_category, self.get_proposal(),
+                                     start_time)
         else:
             user_category = 'visitor'
-            directory = os.path.join(self.base_directory,
-                                     user_category,
-                                     self.get_proposal(),
-                                     self.endstation_name,
-                                     time.strftime("%Y%m%d"))
+            directory = os.path.join(self.base_directory, user_category,
+                                     self.get_proposal(), self.endstation_name,
+                                     start_time)
 
         return directory
 
@@ -94,7 +88,7 @@ class Session(HardwareObject):
         :rtype: str
         """
         return os.path.join(self.get_base_data_directory(),
-                            self.raw_data_folder_name) + '/'
+                            self.raw_data_folder_name)
 
     def get_base_process_directory(self):
         """
@@ -102,7 +96,7 @@ class Session(HardwareObject):
         :rtype: str
         """
         return os.path.join(self.get_base_data_directory(),
-                            self.processed_data_folder_name)+ '/'
+                            self.processed_data_folder_name)
 
     def get_image_directory(self, sub_dir):
         """
@@ -218,3 +212,31 @@ class Session(HardwareObject):
         :rtype: tuple (<proposal_code>, <proposal_number>)
         """
         return self.in_house_users[0]
+
+    def set_session_start_date(self, start_date_str):
+        """
+        :param start_date_str: The session start date
+        :type start_date_str: str
+        """
+        self.session_start_date = start_date_str
+
+    def get_session_start_date(self):
+        """
+        :returns: The session start date
+        :rtype: str
+        """
+        return self.session_start_date
+
+    def set_user_group(self, group_name):
+        """
+        :param group_name: Name of user group
+        :type group_name: str
+        """
+        self.user_group = str(group_name)
+
+    def get_group_name(self):
+        """
+        :returns: Name of user group
+        :rtype: str
+        """
+        return self.user_group

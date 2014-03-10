@@ -12,9 +12,8 @@ shapes handled are any that inherits the Shape base class. There are currently
 two shapes implemented Point and Line.
 
 Point is the graphical representation of a centred position. A point can be
-stored and managed by the ShapeHistory.
-
-Line is a line between two Point objects.
+stored and managed by the ShapeHistory. the Line object represents a line
+between two Point objects.
 
 DrawingEvent is an extension of Qub and handles mouse and keyboard events for
 the Qub canvas. It handles selection and some manipulation of the Shape objects.
@@ -38,16 +37,6 @@ from Qub.Objects.QubDrawingCanvasTools import QubCanvasTarget
 
 from HardwareRepository.BaseHardwareObjects import HardwareObject
 from HardwareRepository.HardwareRepository import dispatcher
-
-__author__ = "Marcus Oskarsson"
-__copyright__ = "Copyright 2012, ESRF"
-__credits__ = ["My great coleagues", "The MxCuBE colaboration"]
-
-__version__ = "0.1"
-__maintainer__ = "Marcus Oskarsson"
-__email__ = "marcus.oscarsson@esrf.fr"
-__status__ = "Beta"
-
 
 SELECTED_COLOR = qt.Qt.green
 NORMAL_COLOR = qt.Qt.yellow
@@ -78,8 +67,6 @@ class ShapeHistory(HardwareObject):
             logging.getLogger('HWR').info('Setting previous drawing:' + \
                                           str(self._drawing) + ' to ' + \
                                           str(drawing))
-            
-        logging.info("Shape history. Setting drawing to %s " % self._drawing )
         self._drawing = drawing
         self._drawing.addDrawingEvent(self._drawing_event)
 
@@ -139,7 +126,6 @@ class ShapeHistory(HardwareObject):
 
         :returns: The QImage contained in the parent widget.
         :rtype: QImage
-        
         """
         if canvas is not None and image is not None:
             device = qt.QPixmap(image)
@@ -178,16 +164,16 @@ class ShapeHistory(HardwareObject):
 
         :param shape: Shape to add.
         :type shape: Shape object.
-        
+
         """
         self.shapes[shape] = shape
 
         self.get_drawing_event_handler().de_select_all()
-        self.get_drawing_event_handler().set_selected(shape, call_cb = True)
+        self.get_drawing_event_handler().set_selected(shape, True, call_cb = True)
 
     def _delete_shape(self, shape):
         shape.unhighlight()
-  
+
         if shape in self.selected_shapes:
             del self.selected_shapes[shape]
 
@@ -196,7 +182,7 @@ class ShapeHistory(HardwareObject):
 
         if shape is self._drawing_event.current_shape:
             self._drawing_event.current_shape = None
-        
+
         if callable(self._drawing_event.deletion_cb):
             self._drawing_event.deletion_cb(shape)
 
@@ -208,7 +194,7 @@ class ShapeHistory(HardwareObject):
         :type shape: Shape object.
         """
         related_points = []
-        
+
         #If a point remove related line first
         if isinstance(shape, Point):
             for s in self.get_shapes():
@@ -257,7 +243,7 @@ class ShapeHistory(HardwareObject):
         for shape in self.get_shapes():
             if isinstance(shape, Point):
                 if shape.get_centred_positions()[0] == cpos:
-                    self._drawing_event.set_selected(shape, call_cb = False)    
+                    self._drawing_event.set_selected(shape, True, call_cb = False)
 
     def get_grid(self):
         """
@@ -274,7 +260,24 @@ class ShapeHistory(HardwareObject):
         :param shape: The shape to select.
         :type shape: Shape
         """
-        self._drawing_event.set_selected(shape, call_cb = False)
+        self._drawing_event.set_selected(shape, True, call_cb = False)
+
+    def de_select_shape(self, shape):
+        """
+        De-select the shape <shape> (programmatically).
+
+        :param shape: The shape to de-select.
+        :type shape: Shape
+        """
+        if self.is_selected(shape):
+            self._drawing_event.set_selected(shape, False, call_cb = False)
+
+    def is_selected(self, shape):
+        return shape in self.selected_shapes
+
+    def get_selected_shapes(self):
+        return self.selected_shapes.itervalues()
+
 
 class DrawingEvent(QubDrawingEvent):
     """
@@ -319,13 +322,13 @@ class DrawingEvent(QubDrawingEvent):
         position.
         """
         clicked_shape = None
-        for shape in self.qub_helper.get_shapes():            
+        for shape in self.qub_helper.get_shapes():
             modifier = shape.get_hit(x, y)
 
             if modifier:
                 clicked_shape = shape
                 break
-            
+
         self.move_to_centred_position_cb(clicked_shape.\
                                          get_centred_positions()[0])
     def mousePressed(self, x, y):
@@ -334,8 +337,8 @@ class DrawingEvent(QubDrawingEvent):
         everything if nothing was under the mouse.
         """
         modifier = None
-        
-        for shape in self.qub_helper.get_shapes():            
+
+        for shape in self.qub_helper.get_shapes():
             modifier = shape.get_hit(x, y)
 
             if modifier:
@@ -344,7 +347,7 @@ class DrawingEvent(QubDrawingEvent):
 
         if not modifier:
             self.de_select_all()
-            
+
     def mouseReleased(self, x, y):
         """
         Handles the type of selection, multiple shapes or
@@ -392,25 +395,15 @@ class DrawingEvent(QubDrawingEvent):
         if callable(self.selection_cb):
             self.selection_cb(self.qub_helper.selected_shapes.values())
 
-    def de_select_current(self):
-        self.current_shape.unhighlight()
-        del self.qub_helper.selected_shapes[self.current_shape]
-
-        if callable(self.selection_cb):
-            self.selection_cb(self.qub_helper.selected_shapes.values())
-
+    def de_select_current(self, call_cb = True):
+        self.set_selected(self.current_shape, False, call_cb)
         self.current_shape = None
 
     def select_current(self, call_cb = True):
         """
         Select the shape referenced by self._current_shape.
         """
-        self.current_shape.highlight()
-        self.qub_helper.selected_shapes[self.current_shape] = \
-            self.current_shape
-
-        if callable(self.selection_cb) and call_cb:
-            self.selection_cb(self.qub_helper.selected_shapes.values())
+        self.set_selected(self.current_shape, True, call_cb)
 
     def delete_selected(self):
         """
@@ -419,19 +412,24 @@ class DrawingEvent(QubDrawingEvent):
         for shape in self.qub_helper.selected_shapes.values():
             self.qub_helper.delete_shape(shape)
 
-        #self.current_shape = None
-
-    def set_selected(self, shape, call_cb = True):
+    def set_selected(self, shape, state, call_cb = True):
         """
         Select the shape <shape> (programmatically).
 
         :param shape: The shape to select.
         :type shape: Shape
         """
-        self.current_shape = shape
-        self.select_current(call_cb)
-        
-        
+        if state:
+            shape.highlight()
+            self.qub_helper.selected_shapes[shape] = shape
+        else:
+            shape.unhighlight()
+            del self.qub_helper.selected_shapes[shape]
+
+        if callable(self.selection_cb) and call_cb:
+            self.selection_cb(self.qub_helper.selected_shapes.values())
+
+
 class Shape(object):
     """
     Base class for shapes.
@@ -474,7 +472,7 @@ class Shape(object):
 
     def update_position(self):
         pass
-        
+
     def move(self, new_positions):
         """
         Moves the shape to the position <new_position>
@@ -523,7 +521,7 @@ class Line(Shape):
     def draw(self):
         qub_line = None
 
-        try:                
+        try:
             qub_line, _ = QubAddDrawing(self._drawing, QubLineDrawingMgr, 
                                          qtcanvas.QCanvasLine)
             qub_line.show()
@@ -554,8 +552,8 @@ class Line(Shape):
     def update_position(self):
         self.qub_line.moveFirstPoint(self.start_qub_p._x, self.start_qub_p._y)
         self.qub_line.moveSecondPoint(self.start_qub_p._x, self.start_qub_p._y)
-    
-    def move(self, new_positions):        
+
+    def move(self, new_positions):
         self.qub_line.moveFirstPoint(new_positions[0][0], new_positions[0][1])
         self.qub_line.moveSecondPoint(new_positions[1][0], new_positions[1][1])
 
@@ -594,7 +592,7 @@ class Point(Shape):
         Shape.__init__(self)
 
         self.qub_point = None
-        
+
         if centred_position is None:
             self.centred_position = queue_model_objects.CentredPosition()
             self.centred_position.centring_method = False
@@ -610,10 +608,10 @@ class Point(Shape):
 
     def get_centred_positions(self):
         return [self.centred_position]
-    
+
     def get_hit(self, x, y):
         return self.qub_point.getModifyClass(x, y)
-        
+
     def draw(self, screen_pos):
         """
         Draws a qub point in the sample video.
@@ -634,19 +632,19 @@ class Point(Shape):
                     return
                   return getattr(QubEventMgr, method_name)(self,event,mgr) 
                 setattr(evmgr, method_name, types.MethodType(prevent_shift, evmgr)) 
-             
+
             qub_point.show()
 
             if screen_pos:
                 qub_point.setPoint(screen_pos[0], screen_pos[1])
                 qub_point.setColor(NORMAL_COLOR)
-        
+
         except:
             logging.getLogger('HWR').\
-                exception('Could not draw the centred position')  
-            
+                exception('Could not draw the centred position')
+
         return qub_point
-        
+
     def show(self):
         self.qub_point.show()
 
@@ -680,3 +678,182 @@ class Point(Shape):
 
     def get_qub_objects(self):
           return [self.qub_point]
+
+
+class CanvasGrid(qtcanvas.QCanvasRectangle) :
+    def __init__(self, canvas, cell_width = 0, cell_height = 0,
+                 beam_width = 0, beam_height = 0) :
+        qtcanvas.QCanvasRectangle.__init__(self, canvas)
+        self.__painter = None
+
+        # Grid dimension
+        self.__num_cells = 0
+        self.__width = None
+        self.__height = None
+        self.__cell_width = cell_width
+        self.__cell_height = cell_height
+        self.__beam_shape = None
+        self.__x_pixel_size = 1
+        self.__y_pixel_size = 1
+        self.__beam_pos = (0, 0, beam_width, beam_height)
+        self.__beam_width = beam_width * self.__x_pixel_size
+        self.__beam_height = beam_height * self.__y_pixel_size
+
+        # (score, (r,g,b))
+        self.__grid_data = {}
+        self.__has_data = False
+
+        self.__highlighted = False
+        self.__label = "Grid n"
+        
+    def drawShape(self, painter):
+        self.__painter = painter
+        rect = self.rect()
+
+        self.__num_cells = 0
+        num_rows = (rect.bottom() - rect.top()) / self.__cell_height
+        num_colls = (rect.right() - rect.left()) / self.__cell_width
+
+        if self.__highlighted:
+            painter.setPen(qt.QPen(qt.Qt.green, 0, qt.Qt.SolidLine))
+        else:
+            painter.setPen(qt.QPen(qt.Qt.black, 0, qt.Qt.DotLine))
+
+        for i in range(0, num_rows + 1):
+            offset =  i*self.__cell_height
+            self.__height = offset
+            painter.drawLine(rect.left(), rect.top() + offset,
+                             rect.right(), rect.top() + offset)
+
+        for i in range(0, num_colls + 1):
+            offset =  i*self.__cell_width
+            self.__width = offset
+            painter.drawLine(rect.left() + offset, rect.top(),
+                             rect.left() + offset, rect.bottom())
+
+        for i in range(0, num_rows):
+            row_offset = i*self.__cell_height
+            for k in range(0, num_colls):
+                coll_offset = k*self.__cell_width
+                self.__num_cells += 1
+                if not self.__has_data:
+                    self.__grid_data[self.__num_cells] = (self.__num_cells, (0, 0, 255))
+                    
+                color = self.__grid_data[self.__num_cells][1]
+
+                painter.setPen(qt.QPen(qt.Qt.black, 0, qt.Qt.NoPen))
+                painter.setBrush(qt.QBrush(qt.QColor(*color), qt.Qt.Dense4Pattern))
+                painter.drawEllipse(rect.left() + coll_offset,
+                                    rect.top() + row_offset,
+                                    self.__beam_width, self.__beam_height)
+
+                painter.setPen(qt.QPen(qt.Qt.black, 1, qt.Qt.SolidLine))
+                tr = qt.QRect(rect.left() + coll_offset, rect.top() + row_offset,
+                              self.__cell_width, self.__cell_height)
+                
+                score = self.__grid_data[self.__num_cells][0]
+
+                if score:
+                    painter.drawText(tr, qt.Qt.AlignCenter, str(score))
+
+            if self.__label and self.__highlighted:
+                #painter.setPen(qt.QPen(qt.Qt.green, 0, qt.Qt.SolidLine))
+                painter.drawText(rect.right() + 2, rect.top() - 5 , self.__label)
+
+    def reshape(self):
+        if self.__width < self.__cell_width:
+            self.__width = self.__cell_width
+
+        if self.__height < self.__cell_height:
+            self.__height = self.__cell_height
+
+        self.setSize(self.__width + 1, self.__height + 1)
+
+    def highlight(self, state):
+        self.__highlighted = state
+
+    def set_label(self, label):
+        self.__label = label
+
+    def get_nummer_of_cells(self):
+        return self.__num_cells
+
+    def set_data(self, data):
+        self.__has_data = True
+        self.__grid_data = data
+
+    def set_x_pixel_size(self, x_size):
+        self.__x_pixel_size = x_size
+        self.__recalculate_beam_dim()
+        
+    def set_y_pixel_size(self, y_size):
+        self.__y_pixel_size = y_size
+        self.__recalculate_beam_dim()
+        
+    def set_beam_position(self, x, y, w=0, h=0):
+        self.__beam_pos = (x, y, w, h)
+        if w and h:
+            self.__recalculate_beam_dim()
+
+    def __recalculate_beam_dim(self):
+        beam_height_mm = self.__beam_pos[3]
+        beam_width_mm = self.__beam_pos[2]
+        self.__cell_height = int(beam_height_mm * self.__y_pixel_size)
+        self.__beam_height = int(beam_height_mm * self.__y_pixel_size)
+        self.__cell_width = int(beam_width_mm * self.__x_pixel_size)
+        self.__beam_width = int(beam_width_mm * self.__x_pixel_size)
+
+    def get_cell_locations(self):
+        locations = []
+        rect = self.rect()
+
+        num_rows = (rect.bottom() - rect.top()) / self.__cell_height
+        num_colls = (rect.right() - rect.left()) / self.__cell_width
+        
+        x = rect.left() * self.__x_pixel_size
+        y = rect.top() * self.__y_pixel_size
+
+        cell_width = self.__cell_width * self.__x_pixel_size
+        cell_height = self.__cell_height * self.__y_pixel_size
+        
+        first_cell_center_x = x + cell_width / 2
+        first_cell_center_y = y + cell_height / 2
+
+        for k in range(0, num_rows):
+            row = []
+
+            for i in range(0, num_colls):
+                row.append((first_cell_center_x + (i * cell_width),
+                            first_cell_center_y + (k * cell_height)))
+
+            locations.append(row)
+            
+        return locations
+
+    def _get_grid(self):
+        rect = self.rect()
+
+        num_rows = (rect.bottom() - rect.top()) / self.__cell_height
+        num_colls = (rect.right() - rect.left()) / self.__cell_width
+        
+        x = rect.left()
+        y = rect.top()
+
+        cell_width = float(self.__cell_width / self.__x_pixel_size)
+        cell_height = float(self.__cell_height / self.__y_pixel_size)
+        
+        first_cell_center_x = ((x + (self.__cell_width / 2)) - self.__beam_pos[0]) / self.__x_pixel_size
+        first_cell_center_y = ((y + (self.__cell_height / 2)) - self.__beam_pos[1]) / self.__x_pixel_size
+
+        grid = {'dx_mm': (cell_width * num_colls),
+                'dy_mm': (cell_height * num_rows),
+                'steps_x': num_colls,
+                'steps_y': num_rows,
+                'x1': first_cell_center_x,
+                'y1': first_cell_center_y,
+                'angle': 0}
+
+        #print "Beam: " + str(self.__beam_pos)
+        #print "Grid: (%i, %i, %i, %i):" % (x, y, self.__cell_width, self.__cell_height)
+
+        return grid
