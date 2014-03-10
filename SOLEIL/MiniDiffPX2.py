@@ -88,6 +88,21 @@ class MiniDiffPX2(MiniDiff):
     def getState(self):
         return str( self.md2.state() )
 
+    def start3ClickCentring(self, sample_info=None):
+        self.currentCentringProcedure = gevent.spawn(manual_centring,
+                                                     self.phiMotor,
+                                                     self.phiyMotor,
+                                                     self.phizMotor,
+                                                     self.sampleXMotor,
+                                                     self.sampleYMotor,
+                                                     self.pixelsPerMmY,
+                                                     self.pixelsPerMmZ,
+                                                     self.getBeamPosX(),
+                                                     self.getBeamPosY(),
+                                                     self.phiy_direction)
+
+        self.currentCentringProcedure.link(self.manualCentringDone)
+
     def setScanStartAngle(self, sangle):
         logging.info("MiniDiffPX2 / setting start angle to %s ", sangle )
         if self.md2_ready:
