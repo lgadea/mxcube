@@ -13,33 +13,30 @@ import copy
 import PyTango
 
 
-         
+### End of update of calibration data
+bp = PyTango.DeviceProxy('i11-ma-cx1/ex/md2-beamposition')
+
 cData = {
-         '1':{'username': '1', 'offset': 1, 'focus_offset': -0.0819, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 293, 'pixelsPerMmZ': 292, 'beamPositionX': 329, 'beamPositionY': 238} }, 
-         '2':{'username': '2', 'offset': 2, 'focus_offset': -0.0903, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 345, 'pixelsPerMmZ': 345, 'beamPositionX': 328, 'beamPositionY': 236} }, 
-         '3':{'username': '3', 'offset': 3, 'focus_offset': -0.1020, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 453, 'pixelsPerMmZ': 454, 'beamPositionX': 326, 'beamPositionY': 233} }, 
-         '4':{'username': '4', 'offset': 4, 'focus_offset': -0.1092, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 606, 'pixelsPerMmZ': 600, 'beamPositionX': 323, 'beamPositionY': 232} }, 
-         '5':{'username': '5', 'offset': 5, 'focus_offset': -0.1098, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 787, 'pixelsPerMmZ': 788, 'beamPositionX': 319, 'beamPositionY': 228} }, 
-         '6':{'username': '6', 'offset': 6, 'focus_offset': -0.1165, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 1033, 'pixelsPerMmZ': 1031, 'beamPositionX': 314, 'beamPositionY': 224} }, 
-         '7':{'username': '7', 'offset': 7, 'focus_offset': -0.1185, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 1349, 'pixelsPerMmZ': 1351, 'beamPositionX': 306, 'beamPositionY': 217} }, 
-         '8':{'username': '8', 'offset': 8, 'focus_offset': -0.1230, 'lightLevel': 50, 'calibrationData': {'pixelsPerMmY': 1776, 'pixelsPerMmZ': 1776, 'beamPositionX': 289, 'beamPositionY': 209} }, 
-         '9':{'username': '9', 'offset': 9, 'focus_offset': -0.1213, 'lightLevel': 50, 'calibrationData': {'pixelsPerMmY': 2309, 'pixelsPerMmZ': 2315, 'beamPositionX': 289, 'beamPositionY': 197} }, 
+         '1':{'username': '1', 'offset': 1, 'focus_offset': -0.0819, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 293, 'pixelsPerMmZ': 292, 'beamPositionX': 329, 'beamPositionY': 238} },
+         '2':{'username': '2', 'offset': 2, 'focus_offset': -0.0903, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 345, 'pixelsPerMmZ': 345, 'beamPositionX': 328, 'beamPositionY': 236} },
+         '3':{'username': '3', 'offset': 3, 'focus_offset': -0.1020, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 453, 'pixelsPerMmZ': 454, 'beamPositionX': 326, 'beamPositionY': 233} },
+         '4':{'username': '4', 'offset': 4, 'focus_offset': -0.1092, 'lightLevel': 20, 'calibrationData': {'pixelsPerMmY': 606, 'pixelsPerMmZ': 600, 'beamPositionX': 323, 'beamPositionY': 232} },
+         '5':{'username': '5', 'offset': 5, 'focus_offset': -0.1098, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 787, 'pixelsPerMmZ': 788, 'beamPositionX': 319, 'beamPositionY': 228} },
+         '6':{'username': '6', 'offset': 6, 'focus_offset': -0.1165, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 1033, 'pixelsPerMmZ': 1031, 'beamPositionX': 314, 'beamPositionY': 224} },
+         '7':{'username': '7', 'offset': 7, 'focus_offset': -0.1185, 'lightLevel': 40, 'calibrationData': {'pixelsPerMmY': 1349, 'pixelsPerMmZ': 1351, 'beamPositionX': 306, 'beamPositionY': 217} },
+         '8':{'username': '8', 'offset': 8, 'focus_offset': -0.1230, 'lightLevel': 50, 'calibrationData': {'pixelsPerMmY': 1776, 'pixelsPerMmZ': 1776, 'beamPositionX': 289, 'beamPositionY': 209} },
+         '9':{'username': '9', 'offset': 9, 'focus_offset': -0.1213, 'lightLevel': 50, 'calibrationData': {'pixelsPerMmY': 2309, 'pixelsPerMmZ': 2315, 'beamPositionX': 289, 'beamPositionY': 197} },
          '10':{'username': '10', 'offset': 10, 'focus_offset':-0.1230, 'lightLevel': 50, 'calibrationData': {'pixelsPerMmY': 2890, 'pixelsPerMmZ': 2899, 'beamPositionX': 278, 'beamPositionY': 185} }
          }
-         
-#cData 21.03.2012 morning
-# Automatic update of calibration data: the code looks into i11-ma-cx1/ex/md2-beamposition publisher and updates cData with values there.
-bp = PyTango.DeviceProxy('i11-ma-cx1/ex/md2-beamposition')
 
 def getNewCalibration():
     print 'Reading beam position calibration data'
     for zoom in cData:
         cData[zoom]['calibrationData']['beamPositionX'] = bp.read_attribute('Zoom' + zoom + '_X').value
         cData[zoom]['calibrationData']['beamPositionY'] = bp.read_attribute('Zoom' + zoom + '_Z').value
-        
+
 getNewCalibration()
 
-### End of update of calibration data
 
 class ProcedureIterator:
     def __init__(self, *args, **kw):
@@ -53,7 +50,7 @@ class ProcedureIterator:
         """Init should return True or False depending if the initializationgetCalibrationData
         is ok or not ; if it is not ok, calling 'next()' will raise a StopIteration exception.
         __abortProcedure__ will *not* be called.
-        """
+        """             
         return True
         
     def __procedure__(self):
@@ -98,8 +95,6 @@ class ManualCentringProcedure(ProcedureIterator):
         #(self.pixelsPerMmY, self.pixelsPerMmZ, self.beamPositionX, self.beamPositionY)
         self.pixelsPerMmY, self.pixelsPerMmZ, self.beam_xc, self.beam_yc = minidiff.getCalibrationData3(minidiff.md2.ZoomLevel)
         self.PhiReference = 327.3
-        self.PhiReference = 322.3
-        getNewCalibration()
         print 
         print 'MS debug 13.11.2011 pixelsPerMmY', self.pixelsPerMmY
         print 'MS debug 13.11.2011 pixelsPerMmZ', self.pixelsPerMmZ

@@ -104,7 +104,10 @@ class TangoDCMotorWPositions(TangoDCMotor):
         logging.getLogger().debug("Moving motor %s to predefined position %s" % ( self.userName(), positionName ))
         try:
             abspos = self.predefinedPositions[positionName]
-            TangoDCMotor.move(self, float(abspos) )
+            try:
+                TangoDCMotor.move(self, int(abspos) )
+            except:
+                TangoDCMotor.move(self, float(abspos) )
             #self.move(self.predefinedPositions[positionName], focus_offset = self.predefinedFocusPositions[positionName])
         except:
             logging.getLogger().exception('Cannot move motor %s: invalid position name.', str(self.userName()))

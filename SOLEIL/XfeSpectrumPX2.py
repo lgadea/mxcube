@@ -115,29 +115,31 @@ class XfeSpectrumPX2(Equipment):
             curr["escan_dir"] = directory
             curr["escan_prefix"] = prefix
 
-        a = directory.split(os.path.sep)
-        suffix_path = os.path.join(*a[4:])
-        if 'inhouse' in a:
-            a_dir = os.path.join('/data/pyarch/', a[2], suffix_path)
-        else:
-            a_dir = os.path.join('/data/pyarch/', a[4], a[3], *a[5:])
-        if a_dir[-1] != os.path.sep:
-            a_dir += os.path.sep
-        if not os.path.exists(a_dir):
-            try:
-                #logging.getLogger().debug("XRFSpectrum: creating %s", a_dir)
-                os.makedirs(a_dir)
-            except:
-                try:
-                    smis_name = os.environ["SMIS_BEAMLINE_NAME"].lower()
-                    x, y = smis_name.split("-")
-                    bldir = x + "eh" + y
-                except:
-                    bldir = os.environ["SMIS_BEAMLINE_NAME"].lower()
-                tmp_dir = "/data/pyarch/%s" % bldir
-                logging.getLogger().error(
-                    "XRFSpectrum: error creating archive directory - the data will be saved in %s instead", tmp_dir)
+        #a = directory.split(os.path.sep)
+        #suffix_path = os.path.join(*a[4:])
+        #if 'inhouse' in a:
+            #a_dir = os.path.join('/data/pyarch/', a[2], suffix_path)
+        #else:
+            #a_dir = os.path.join('/data/pyarch/', a[4], a[3], *a[5:])
+        #if a_dir[-1] != os.path.sep:
+            #a_dir += os.path.sep
+        #if not os.path.exists(a_dir):
+            #try:
+                ##logging.getLogger().debug("XRFSpectrum: creating %s", a_dir)
+                #os.makedirs(a_dir)
+            #except:
+                #try:
+                    #smis_name = os.environ["SMIS_BEAMLINE_NAME"].lower()
+                    #x, y = smis_name.split("-")
+                    #bldir = x + "eh" + y
+                #except:
+                    #bldir = os.environ["SMIS_BEAMLINE_NAME"].lower()
+                #tmp_dir = "/data/pyarch/%s" % bldir
+                #logging.getLogger().error(
+                    #"XRFSpectrum: error creating archive directory - the data will be saved in %s instead", tmp_dir)
 
+        a_dir = os.path.normpath(directory)
+        print 'XfeSpectrumPX2.py a_dir', a_dir
         filename_pattern = os.path.join(
             directory, "%s_%s_%%02d" % (prefix, time.strftime("%d_%b_%Y")))
         aname_pattern = os.path.join(
