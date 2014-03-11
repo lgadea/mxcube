@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from qt import *
 from HardwareRepository.BaseHardwareObjects import Equipment
 from HardwareRepository.TaskUtils import *
@@ -6,29 +5,15 @@ import logging
 import PyChooch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-#from SpecClient import SpecClientError
-#from SpecClient import SpecVariable
-#from SpecClient import SpecConnectionsManager
-#from SpecClient import SpecEventsDispatcher
-#from SimpleDevice2c import SimpleDevice #MS 05.03.2013
 import os
 import time
 import types
 import math
-from xabs_lib import *
-#from simple_scan_class import *
-import string
-#MS 05.03.2013
-from PyTango import DeviceProxy
-import numpy
-import pickle
+import gevent
 
 class EnergyScan(Equipment):
-    
-    MANDATORY_HO={"BLEnergy":"BLEnergy"}
-    
-    
     def init(self):
+        self.ready_event = gevent.event.Event()
         self.scanning = None
         self.moving = None
         self.energyMotor = None
@@ -90,172 +75,114 @@ class EnergyScan(Equipment):
             if self.transmissionHO is None:
                 logging.getLogger("HWR").warning('EnergyScan: you should specify the transmission hardware object')
 
-        self.dbConnection=self.getObjectByRole("dbserver")
-        if self.dbConnection is None:
-            logging.getLogger("HWR").warning('EnergyScan: you should specify the database hardware object')
-        self.scanInfo=None
+            self.cryostreamHO=self.getObjectByRole("cryostream")
+            if self.cryostreamHO is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the cryo stream hardware object')
 
-        if self.isSpecConnected():
-            self.sConnected()
-            
-    def connectTangoDevices(self):
-        try :
-            self.BLEnergydevice = DeviceProxy(self.getProperty("blenergy")) #, verbose=False)
-            self.BLEnergydevice.waitMoves = True
-            self.BLEnergydevice.timeout = 30000
-        except :
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("blenergy")))
-            self.canScan = False
-            
-        # Connect to device mono defined "tangoname2" in the xml file 
-        # used for conversion in wavelength
-        try :    
-            self.monodevice = DeviceProxy(self.getProperty("mono")) #, verbose=False)
-            self.monodevice.waitMoves = True
-            self.monodevice.timeout = 6000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("mono")))
-            self.canScan = False
-        #mono_mt_rx
-        try :    
-            self.mono_mt_rx_device = DeviceProxy(self.getProperty("mono_mt_rx")) #, verbose=False)
-            #self.monodevice.waitMoves = True
-            self.mono_mt_rx_device.timeout = 6000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("mono_mt_rx")))
-            self.canScan = False
-        # Nom du device bivu (Energy to gap) : necessaire pour amelioration du positionnement de l'onduleur (Backlash)
-        try :    
-            self.U20Energydevice = DeviceProxy(self.getProperty("U24Energy")) #, movingState="MOVING")
-            self.U20Energydevice.timeout = 30000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("U24Energy")))
-            self.canScan = False
-            
-        try :
-            self.fluodetdevice = DeviceProxy(self.getProperty("ketek")) #, verbose=False)
-            self.fluodetdevice.timeout = 1000
-        except :
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("ketek")))
-            self.canScan = False
-            
-        try :    
-            self.counterdevice = DeviceProxy(self.getProperty("counter")) #, verbose=False)
-            self.counterdevice.timeout = 1000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("counter")))
-            self.canScan = False
+            self.machcurrentHO=self.getObjectByRole("machcurrent")
+            if self.machcurrentHO is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the machine current hardware object')
 
-        try :    
-            self.xbpmdevice = DeviceProxy(self.getProperty("xbpm")) #, verbose=False)
-            self.xbpmdevice.timeout = 30000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("xbpm")))
-            self.canScan = False
-       
-        try :    
-            self.attdevice = DeviceProxy(self.getProperty("attenuator")) #, verbose=False)
-            self.attdevice.timeout = 6000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("attenuator")))
-            self.canScan = False
+            self.fluodetectorHO=self.getObjectByRole("fluodetector")
+            if self.fluodetectorHO is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the fluorescence detector hardware object')
+
+            try:
+                #self.moveEnergy.connectSignal('commandReplyArrived', self.moveEnergyCmdFinished)
+                #self.moveEnergy.connectSignal('commandBeginWaitReply', self.moveEnergyCmdStarted)
+                #self.moveEnergy.connectSignal('commandFailed', self.moveEnergyCmdFailed)
+                #self.moveEnergy.connectSignal('commandAborted', self.moveEnergyCmdAborted)
+                self.moveEnergy.connectSignal('commandReady', self.moveEnergyCmdReady)
+                self.moveEnergy.connectSignal('commandNotReady', self.moveEnergyCmdNotReady)
+            except AttributeError,diag:
+                logging.getLogger("HWR").warning('EnergyScan: error initializing move energy (%s)' % str(diag))
+                self.moveEnergy=None
+
+            if self.energyMotor is not None:
+                self.energyMotor.connect('positionChanged', self.energyPositionChanged)
+                self.energyMotor.connect('stateChanged', self.energyStateChanged)
+                self.energyMotor.connect('limitsChanged', self.energyLimitsChanged)
+            if self.resolutionMotor is None:
+                logging.getLogger("HWR").warning('EnergyScan: no resolution motor (unable to restore it after moving the energy)')
+            else:
+                self.resolutionMotor.connect('positionChanged', self.resolutionPositionChanged)
+
+        try:
+            self.energy2WavelengthChannel=self.getChannelObject('hc_over_e')
+        except KeyError:
+            self.energy2WavelengthChannel=None
+        if self.energy2WavelengthChannel is None:
+            logging.getLogger("HWR").error('EnergyScan: error initializing energy-wavelength constant (missing channel)')
+
+        self.thEdgeThreshold = self.getProperty("theoritical_edge_threshold")
+        if self.thEdgeThreshold is None:
+           self.thEdgeThreshold = 0.01
         
-#        try :    
-#            self.md2device = DeviceProxy(self.getProperty("md2")) #, verbose=False)
-#            self.md2device.timeout = 2000
-#        except :    
-#            logging.getLogger("HWR").error("%s not found" %(self.getProperty("md2")))
-#            self.canScan = False
-        
-        try:
-            self.lightdevice = DeviceProxy(self.getProperty("lightextract")) #, verbose=False)
-            self.lightdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("lightextract")))
-            self.canScan = False
+        if self.isConnected():
+           self.sConnected()
 
-        try:
-            self.guillotdevice = DeviceProxy(self.getProperty("guillot")) #, verbose=False)
-            self.guillotdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("guillot")))
-            self.canScan = False
 
-        try:
-            self.bstdevice = DeviceProxy(self.getProperty("bst")) #, verbose=False)
-            self.bstdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("bst")))
-            self.canScan = False
-
-        try:
-            self.ketekinsertdevice = DeviceProxy(self.getProperty("ketekinsert")) #, verbose=False)
-            self.ketekinsertdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("ketekinsert")))
-            self.canScan = False
-
-        try:
-            self.fastshutterdevice = DeviceProxy(self.getProperty("fastshutter")) #, verbose=False)
-            self.fastshutterdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("fastshutter")))
-            self.canScan = False
-        
-                            
     def isConnected(self):
-	return True
-        #return self.isSpecConnected()
-        
-    def isSpecConnected(self):
-        logging.getLogger("HWR").debug('EnergyScan:isSpecConnected')
-        return True
+        if self.defaultWavelengthChannel is not None:
+          # single wavelength beamline
+          try:
+            return self.defaultWavelengthChannel.isConnected()
+          except:
+            return False
+        else:
+          try:
+            return self.doEnergyScan.isConnected()
+          except:
+            return False
 
+    def resolutionPositionChanged(self,res):
+        self.lastResolution=res
+
+    def energyStateChanged(self, state):
+        if state == self.energyMotor.READY:
+          if self.resolutionMotor is not None:
+            self.resolutionMotor.dist2res()
+    
     # Handler for spec connection
     def sConnected(self):
-        logging.getLogger("HWR").debug('EnergyScan:sConnected')
-        self.emit('connected', ())
-        self.emit('setDirectory', (self.directoryPrefix,))
+        if self.energy2WavelengthChannel is not None and self.energy2WavelengthConstant is None:
+            try:
+                self.energy2WavelengthConstant=float(self.energy2WavelengthChannel.getValue())
+            except:
+                logging.getLogger("HWR").exception('EnergyScan: error initializing energy-wavelength constant')
 
+        if self.defaultWavelengthChannel is not None and self.defaultWavelength is None:
+            try:
+                val=self.defaultWavelengthChannel.getValue()
+            except:
+                logging.getLogger("HWR").exception('EnergyScan: error getting default wavelength')
+            else:
+                try:
+                    self.defaultWavelength=float(val)
+                except:
+                    logging.getLogger("HWR").exception('EnergyScan: error getting default wavelength (%s)')
+                else:
+                    logging.getLogger("HWR").debug('EnergyScan: default wavelength is %f' % self.defaultWavelength)
+
+        self.emit('connected', ())
 
     # Handler for spec disconnection
     def sDisconnected(self):
-        logging.getLogger("HWR").debug('EnergyScan:sDisconnected')
         self.emit('disconnected', ())
 
     # Energy scan commands
     def canScanEnergy(self):
-	return True
-        logging.getLogger("HWR").debug('EnergyScan:canScanEnergy : %s' %(str(self.canScan)))
-        return self.canScan
-
- 
-#        return self.doEnergyScan is not None
-	
-    def startEnergyScan(self, 
-                        element, 
-                        edge, 
-                        directory, 
-                        prefix, 
-                        session_id = None, 
-                        blsample_id = None):
-        
-        logging.getLogger("HWR").debug('EnergyScan:startEnergyScan')
-        print 'edge', edge
-        print 'element', element
-        print 'directory', directory
-        print 'prefix', prefix
-        #logging.getLogger("HWR").debug('EnergyScan:edge', edge)
-        #logging.getLogger("HWR").debug('EnergyScan:element', element)
-        #logging.getLogger("HWR").debug('EnergyScan:directory', directory)
-        #logging.getLogger("HWR").debug('EnergyScan:prefix', prefix)
-        #logging.getLogger("HWR").debug('EnergyScan:edge', edge)
-        self.scanInfo={"sessionId":session_id,
-                       "blSampleId":blsample_id,
-                       "element":element,
-                       "edgeEnergy":edge}
-#        if self.fluodetectorHO is not None:
-#            self.scanInfo['fluorescenceDetector']=self.fluodetectorHO.userName()
+        if not self.isConnected():
+            return False
+        if self.energy2WavelengthConstant is None or self.energyScanArgs is None:
+            return False
+        return self.doEnergyScan is not None
+    def startEnergyScan(self,element,edge,directory,prefix,session_id=None,blsample_id=None):
+        self._element = element
+        self._edge = edge
+        self.scanInfo={"sessionId":session_id,"blSampleId":blsample_id,"element":element,"edgeEnergy":edge}
+        if self.fluodetectorHO is not None:
+            self.scanInfo['fluorescenceDetector']=self.fluodetectorHO.userName()
         if not os.path.isdir(directory):
             logging.getLogger("HWR").debug("EnergyScan: creating directory %s" % directory)
             try:
@@ -264,33 +191,50 @@ class EnergyScan(Equipment):
                 logging.getLogger("HWR").error("EnergyScan: error creating directory %s (%s)" % (directory,str(diag)))
                 self.emit('scanStatusChanged', ("Error creating directory",))
                 return False
-        self.doEnergyScan(element, edge, directory, prefix)
+        try:
+            curr=self.energyScanArgs.getValue()
+        except:
+            logging.getLogger("HWR").exception('EnergyScan: error getting energy scan parameters')
+            self.emit('scanStatusChanged', ("Error getting energy scan parameters",))
+            return False
+        try:
+            curr["escan_dir"]=directory
+            curr["escan_prefix"]=prefix
+        except TypeError:
+            curr={}
+            curr["escan_dir"]=directory
+            curr["escan_prefix"]=prefix
+
+        self.archive_prefix = prefix
+
+        try:
+            self.energyScanArgs.setValue(curr)
+        except:
+            logging.getLogger("HWR").exception('EnergyScan: error setting energy scan parameters')
+            self.emit('scanStatusChanged', ("Error setting energy scan parameters",))
+            return False
+        try:
+            self.doEnergyScan("%s %s" % (element,edge))
+        except:
+            logging.getLogger("HWR").error('EnergyScan: problem calling spec macro')
+            self.emit('scanStatusChanged', ("Error problem spec macro",))
+            return False
         return True
-        
-    def cancelEnergyScan(self):
-        logging.getLogger("HWR").debug('EnergyScan:cancelEnergyScan')
+    def cancelEnergyScan(self, *args):
         if self.scanning:
-            self.scanning = False
-            
+            self.doEnergyScan.abort()
+            self.ready_event.set()
     def scanCommandReady(self):
-        logging.getLogger("HWR").debug('EnergyScan:scanCommandReady')
         if not self.scanning:
             self.emit('energyScanReady', (True,))
-            
     def scanCommandNotReady(self):
-        logging.getLogger("HWR").debug('EnergyScan:scanCommandNotReady')
         if not self.scanning:
             self.emit('energyScanReady', (False,))
-            
-    def scanCommandStarted(self):
-        logging.getLogger("HWR").debug('EnergyScan:scanCommandStarted')
-
+    def scanCommandStarted(self, *args):
         self.scanInfo['startTime']=time.strftime("%Y-%m-%d %H:%M:%S")
         self.scanning = True
         self.emit('energyScanStarted', ())
-    
-    def scanCommandFailed(self):
-        logging.getLogger("HWR").debug('EnergyScan:scanCommandFailed')
+    def scanCommandFailed(self, *args):
         self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
         self.scanning = False
         self.storeEnergyScan()
@@ -373,17 +317,15 @@ class EnergyScan(Equipment):
             os.makedirs(os.path.dirname(scanArchiveFilePrefix))
         
         try:
-            pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, chooch_graph_data = PyChooch.calc(scanData,
-                                                                                    elt, 
-                                                                                    edge, 
-                                                                                    filenameOut)
+            f=open(rawScanFile, "w")
+            pyarch_f=open(archiveRawScanFile, "w")
         except:
-            pk = self.thEdge
-            rm = (pk + 50.) / 1000.0
-            savpk = pk
-            ip = pk - 5. / 1000.0
-            logging.getLogger("HWR").info("Chooch failed badly")
-            #, fppPeak, fpPeak, ip, fppInfl, fpInfl, chooch_graph_data = self.thEdge, 
+            logging.getLogger("HWR").exception("could not create raw scan files")
+            self.storeEnergyScan()
+            self.emit("energyScanFailed", ())
+            return
+        else:
+            scanData = []
             
             if scanObject is None:                
                 raw_data_file = os.path.join(os.path.dirname(scanFilePrefix), 'data.raw')
@@ -419,31 +361,30 @@ class EnergyScan(Equipment):
         rm=(pk+30)/1000.0
         pk=pk/1000.0
         savpk = pk
-        ip = ip / 1000.0
+        ip=ip/1000.0
         comm = ""
-        logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge,  pk, ip, rm))
+        logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge, pk,ip,rm))
 
-        if math.fabs(self.thEdge - ip) > 0.01:
-            pk = 0
-            ip = 0
-            rm = self.thEdge + 0.05
-            comm = 'Calculated peak (%f) is more that 10eV away from the theoretical value (%f). Please check your scan' % (savpk, self.thEdge)
-    
-            logging.getLogger("HWR").warning('EnergyScan: calculated peak (%f) is more that 10eV %s the theoretical value (%f). Please check your scan and choose the energies manually' % (savpk, (self.thEdge - ip) > 0.01 and "below" or "above", self.thEdge))
-        
-        scanFile = filenameIn
-        archiveEfsFile = filenameOut #os.path.extsep.join((scanArchiveFilePrefix, "efs"))
+        if math.fabs(self.thEdge - ip) > self.thEdgeThreshold:
+          pk = 0
+          ip = 0
+          rm = self.thEdge + 0.03
+          comm = 'Calculated peak (%f) is more that 10eV away from the theoretical value (%f). Please check your scan' % (savpk, self.thEdge)
+   
+          logging.getLogger("HWR").warning('EnergyScan: calculated peak (%f) is more that 20eV %s the theoretical value (%f). Please check your scan and choose the energies manually' % (savpk, (self.thEdge - ip) > 0.02 and "below" or "above", self.thEdge))
+
+        archiveEfsFile=os.path.extsep.join((scanArchiveFilePrefix, "efs"))
         try:
-            fi = open(scanFile)
-            fo = open(archiveEfsFile, "w")
+          fi=open(scanFile)
+          fo=open(archiveEfsFile, "w")
         except:
-            self.storeEnergyScan()
-            self.emit("energyScanFailed", ())
-            return
+          self.storeEnergyScan()
+          self.emit("energyScanFailed", ())
+          return
         else:
-            fo.write(fi.read())
-            fi.close()
-            fo.close()
+          fo.write(fi.read())
+          fi.close()
+          fo.close()
 
         self.scanInfo["peakEnergy"]=pk
         self.scanInfo["inflectionEnergy"]=ip
@@ -478,30 +419,29 @@ class EnergyScan(Equipment):
         handles.append(ax2.plot(chooch_graph_x, chooch_graph_y2, color='red'))
         canvas=FigureCanvasAgg(fig)
 
-        escan_png = filenameOut[:-3] + 'png' #.replace('.esf', '.png') #os.path.extsep.join((scanFilePrefix, "png"))
-        escan_archivepng = filenameOut[:-4] + '_archive.png'  #os.path.extsep.join((scanArchiveFilePrefix, "png")) 
+        escan_png = os.path.extsep.join((scanFilePrefix, "png"))
+        escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png")) 
         self.scanInfo["jpegChoochFileFullPath"]=str(escan_archivepng)
         try:
-            logging.getLogger("HWR").info("Rendering energy scan and Chooch graphs to PNG file : %s", escan_png)
-            canvas.print_figure(escan_png, dpi=80)
+          logging.getLogger("HWR").info("Rendering energy scan and Chooch graphs to PNG file : %s", escan_png)
+          canvas.print_figure(escan_png, dpi=80)
         except:
-            logging.getLogger("HWR").exception("could not print figure")
+          logging.getLogger("HWR").exception("could not print figure")
         try:
-            logging.getLogger("HWR").info("Saving energy scan to archive directory for ISPyB : %s", escan_archivepng)
-            canvas.print_figure(escan_archivepng, dpi=80)
+          logging.getLogger("HWR").info("Saving energy scan to archive directory for ISPyB : %s", escan_archivepng)
+          canvas.print_figure(escan_archivepng, dpi=80)
         except:
-            logging.getLogger("HWR").exception("could not save figure")
+          logging.getLogger("HWR").exception("could not save figure")
 
         self.storeEnergyScan()
         self.scanInfo=None
 
         logging.getLogger("HWR").info("<chooch> returning" )
+        self.emit('chooch_finished', (pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title))
         return pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title
-    
+
     def scanStatusChanged(self,status):
-        logging.getLogger("HWR").debug('EnergyScan:scanStatusChanged')
         self.emit('scanStatusChanged', (status,))
-        
     def storeEnergyScan(self):
         if self.dbConnection is None:
             return
@@ -678,7 +618,6 @@ class EnergyScan(Equipment):
 
     # Elements commands
     def getElements(self):
-        logging.getLogger("HWR").debug('EnergyScan:getElements')
         elements=[]
         try:
             for el in self["elements"]:
@@ -689,7 +628,6 @@ class EnergyScan(Equipment):
 
     # Mad energies commands
     def getDefaultMadEnergies(self):
-        logging.getLogger("HWR").debug('EnergyScan:getDefaultMadEnergies')
         energies=[]
         try:
             for el in self["mad"]:
@@ -697,14 +635,6 @@ class EnergyScan(Equipment):
         except IndexError:
             pass
         return energies
-        
-    def getFilename(self, directory, filename, element, edge):
-        filenameIn = os.path.join(directory, filename)
-        filenameIn += "_" + element + "_" + "_".join(edge) + ".dat"
-        return filenameIn
-    
-    def doEnergyScan(self, element, edge, directory, filename):
-        logging.getLogger("HWR").info('EnergyScan: Element:%s Edge:%s' %(element,edge))    	
 
 def StoreEnergyScanThread(db_conn, scan_info):
     scanInfo = dict(scan_info)
