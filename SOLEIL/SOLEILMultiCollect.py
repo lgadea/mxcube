@@ -420,6 +420,11 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
         return
 
     @task
+    def data_collection_cleanup(self):
+        logging.info("<SOLEIL MultiCollect> TODO - close fast shutter" )
+
+
+    @task
     def set_transmission(self, transmission_percent):
         logging.info("<SOLEIL MultiCollect> TODO - set transmission")
         #self.bl_control.transmission.setTransmission(transmission_percent)

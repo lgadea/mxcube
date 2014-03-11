@@ -800,10 +800,12 @@ class MiniDiff(Equipment):
             for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi', 'focus', 'kappa', 'kappa_phi'):
                 mot_obj = self.getDeviceByRole(motor_role)
 
-                try:
-                    motors[motor_role] = motor_pos[mot_obj] 
-                except KeyError:
-                    motors[motor_role] = mot_obj.getPosition()
+                if mot_obj is not None:
+                  try:
+                      motors[motor_role] = motor_pos[mot_obj] 
+                  except KeyError:
+                      motors[motor_role] = mot_obj.getPosition()
+
             self.centringStatus["motors"]=motors
             self.centringStatus["method"]=self.currentCentringMethod
             self.centringStatus["valid"]=True
