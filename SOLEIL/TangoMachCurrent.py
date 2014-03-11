@@ -14,7 +14,7 @@ class TangoMachCurrent(Device):
     def init(self):
             
         self.device = PyTango.DeviceProxy(self.getProperty("tangoname"))
-        self.flux =  PyTango.DeviceProxy('i11-ma-c04/dt/xbpm_diode.1')
+        #self.flux =  PyTango.DeviceProxy('i11-ma-c04/dt/xbpm_diode.1')
         #self.device.timeout = 6000 # Setting timeout to 6 sec
         self.setIsReady(True)
         stateChan = self.getChannelObject("current") # utile seulement si statechan n'est pas defini dans le code
@@ -57,6 +57,6 @@ class TangoMachCurrent(Device):
             self.opmsg = opmsg
             logging.getLogger('HWR').info("<b>"+self.opmsg+"</b>")
         
-        opmsg = 'Flux: ' + str(round(self.flux.intensity, 3)) + ' uA' #MS. 29.01.13 ugly hack to have flux in the output instead of opmsg
+        #opmsg = 'Flux: ' + str(round(self.flux.intensity, 3)) + ' uA' #MS. 29.01.13 ugly hack to have flux in the output instead of opmsg
         self.emit('valueChanged', (mach, opmsg, fillmode, opmsg))
 

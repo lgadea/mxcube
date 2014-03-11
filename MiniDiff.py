@@ -21,7 +21,8 @@ except ImportError:
 USER_CLICKED_EVENT = AsyncResult()
 
 
-def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, imgWidth, imgHeight, phiy_direction=1):
+def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, 
+                    beam_xc, beam_yc, phiy_direction=1):
   global USER_CLICKED_EVENT
   X, Y = [], []
   centredPosRel = {}
@@ -29,8 +30,6 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, i
   if all([x.isReady() for x in (phi, phiy, phiz, sampx, sampy)]):
     phiSavedPosition = phi.getPosition()
     phiSavedDialPosition = phi.getDialPosition()
-    logging.info("MiniDiff phi saved dial = %f " % phiSavedDialPosition)
-    phiSavedDialPosition = 327.3 
   else:
     raise RuntimeError, "motors not ready"
 
@@ -44,13 +43,13 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, i
         break
       phi.moveRelative(90)
 
-    beam_xc = imgWidth / 2
-    beam_yc = imgHeight / 2
+    # 2014-01-19-bessy-mh: variable beam position coordinates are passed as parameters
+    # beam_xc = imgWidth / 2
+    # beam_yc = imgHeight / 2
     yc = (Y[0]+Y[2]) / 2
     y =  Y[0] - yc
     x =  yc - Y[1]
-    #b1 = -math.radians(phiSavedDialPosition)
-    b1 = -math.radians(phiSavedPosition - phiSavedDialPosition)
+    b1 = -math.radians(phiSavedDialPosition)
     rotMatrix = numpy.matrix([math.cos(b1), -math.sin(b1), math.sin(b1), math.cos(b1)])
     rotMatrix.shape = (2,2)
     dx, dy = numpy.dot(numpy.array([x,y]), numpy.array(rotMatrix))/pixelsPerMmY 
@@ -98,11 +97,25 @@ class myimage:
         return self.imgcopy
 
 
-def take_snapshots(light, phi, zoom, drawing):
+def take_snapshots(light, light_motor, phi, zoom, drawing):
   centredImages = []
-  
+
   if light is not None:
     light.wagoIn()
+
+    # No light level, choose default
+    if light_motor.getPosition() == 0:
+      zoom_level = zoom.getPosition()
+      light_level = None
+
+      try:
+        light_level = zoom['positions'][0][zoom_level].getProperty('lightLevel')
+      except IndexError:
+        logging.getLogger("HWR").info("Could not get default light level")
+
+      if light_level:
+        light_motor.move(light_level)
+
     while light.getWagoState()!="in":
       time.sleep(0.5)
   for i in range(4):
@@ -140,7 +153,6 @@ class MiniDiff(Equipment):
         self.pixelsPerMmZ=None
         self.imgWidth = None
         self.imgHeight = None
-    
         self.centredTime = 0
 
         self.connect(self, 'equipmentReady', self.equipmentReady)
@@ -168,8 +180,11 @@ class MiniDiff(Equipment):
         self.sampleXMotor = self.getDeviceByRole('sampx')
         self.sampleYMotor = self.getDeviceByRole('sampy')
         self.camera = self.getDeviceByRole('camera')
+        self.kappaMotor = self.getDeviceByRole('kappa')
+        self.kappaPhiMotor = self.getDeviceByRole('kappa_phi')
 
-        self.camera.addChannel({ 'type': 'tango', 'name': 'jpegImage' }, "JpegImage")
+        # mh 2013-11-05:why is the channel read directly? disabled for the moment
+        # self.camera.addChannel({ 'type': 'tango', 'name': 'jpegImage' }, "JpegImage")
 
         sc_prop=self.getProperty("samplechanger")
         if sc_prop is not None:
@@ -300,13 +315,12 @@ class MiniDiff(Equipment):
     def isReady(self):
       if self.isValid():
          motorsQuiet = True 
-         logging.info("Motor sampleX is %s" % str(self.sampleYMotor) )
-         logging.info("Motor sampleY is %s" % str(self.sampleYMotor) )
-         logging.info("Motor zoom is %s" % str(self.zoomMotor) )
-         logging.info("Motor phi is %s" % str(self.phiMotor) )
-         logging.info("Motor phiz is %s" % str(self.phizMotor) )
-         logging.info("Motor phiy is %s" % str(self.phiyMotor) )
-   
+         #logging.info("Motor sampleX is %s" % str(self.sampleYMotor) )
+         #logging.info("Motor sampleY is %s" % str(self.sampleYMotor) )
+         #logging.info("Motor zoom is %s" % str(self.zoomMotor) )
+         #logging.info("Motor phi is %s" % str(self.phiMotor) )
+         #logging.info("Motor phiz is %s" % str(self.phizMotor) )
+         #logging.info("Motor phiy is %s" % str(self.phiyMotor) )   
          for m in (self.sampleXMotor, self.sampleYMotor, self.zoomMotor, self.phiMotor, self.phizMotor, self.phiyMotor):
             if m.motorIsMoving():
                  motorsQuiet = False
@@ -327,12 +341,6 @@ class MiniDiff(Equipment):
             self.phiyMotor is not None and \
             self.camera is not None
 
-
-    def getBeamInfo(self, callback=None, error_callback=None):
-        logging.info(" I AM command getBeamInfo in MiniDiff.py ")
-        cmd_obj = self.getCommandObject("getBeamInfo")
-        if cmd_obj:
-           cmd_obj( callback, error_callback )
 
     def apertureChanged(self, *args):
         # will trigger minidiffReady signal for update of beam size in video
@@ -404,38 +412,40 @@ class MiniDiff(Equipment):
 
 
     def phizMotorMoved(self, pos):
-        logging.info("MiniDiff.py - phiz moved")
         if time.time() - self.centredTime > 1.0:
           self.invalidateCentring()
 
     def phiyMotorMoved(self, pos):
-        logging.info("MiniDiff.py - phiy moved")
         if time.time() - self.centredTime > 1.0:
            self.invalidateCentring()
 
 
     def sampleXMotorMoved(self, pos):
-        logging.info("MiniDiff.py - samplex moved")
         if time.time() - self.centredTime > 1.0:
            self.invalidateCentring()
 
 
     def sampleYMotorMoved(self, pos):
-        logging.info("MiniDiff.py - sampley moved")
         if time.time() - self.centredTime > 1.0:
            self.invalidateCentring()
 
 
     def sampleChangerSampleIsLoaded(self, state):
-        logging.info("MiniDiff.py - sample changer is loaded ")
         if time.time() - self.centredTime > 1.0:
            self.invalidateCentring()
 
+    def getBeamPosX(self):
+        return self.imgWidth / 2
+
+    def getBeamPosY(self):
+        return self.imgHeight / 2
 
     def moveToBeam(self, x, y):
         try:
-            self.phizMotor.moveRelative((y-(self.imgHeight/2))/float(self.pixelsPerMmZ))
-            self.phiyMotor.moveRelative((x-(self.imgWidth/2))/float(self.pixelsPerMmY))
+            beam_xc = self.getBeamPosX()
+            beam_yc = self.getBeamPosY()
+            self.phizMotor.moveRelative((y-beam_yc)/float(self.pixelsPerMmZ))
+            self.phiyMotor.moveRelative((x-beam_xc)/float(self.pixelsPerMmY))
         except:
             logging.getLogger("HWR").exception("MiniDiff: could not center to beam, aborting")
 
@@ -504,8 +514,8 @@ class MiniDiff(Equipment):
                                                      self.sampleYMotor,
                                                      self.pixelsPerMmY,
                                                      self.pixelsPerMmZ,
-                                                     self.imgWidth,
-                                                     self.imgHeight,
+                                                     self.getBeamPosX(),
+                                                     self.getBeamPosY(),
                                                      self.phiy_direction)
          
         self.currentCentringProcedure.link(self.manualCentringDone)
@@ -525,8 +535,8 @@ class MiniDiff(Equipment):
         rotMatrix.shape = (2, 2)
         invRotMatrix = numpy.array(rotMatrix.I)
         dx, dy = numpy.dot(numpy.array([sampx, sampy]), invRotMatrix)*self.pixelsPerMmY
-        beam_pos_x = self.imgWidth / 2
-        beam_pos_y = self.imgHeight / 2
+        beam_pos_x = self.getBeamPosX()
+        beam_pos_y = self.getBeamPosY()
 
         x = (phiy * self.pixelsPerMmY) + beam_pos_x
         y = dy + (phiz * self.pixelsPerMmZ) + beam_pos_y
@@ -534,7 +544,6 @@ class MiniDiff(Equipment):
         return x, y
  
     def manualCentringDone(self, manual_centring_procedure):
-        logging.info("manual centring DONE")
         try:
           motor_pos = manual_centring_procedure.get()
           if isinstance(motor_pos, gevent.GreenletExit):
@@ -543,7 +552,6 @@ class MiniDiff(Equipment):
           logging.exception("Could not complete manual centring")
           self.emitCentringFailed()
         else:
-          logging.info("Moving sample to centred position")
           self.emitProgressMessage("Moving sample to centred position...")
           self.emitCentringMoving()
           try:
@@ -553,7 +561,7 @@ class MiniDiff(Equipment):
             self.emitCentringFailed()
           else:
             self.phiMotor.syncMoveRelative(-180)
-          logging.info("EMITTING CENTRING SUCCESSFUL")
+          #logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
           self.emitCentringSuccessful()
           self.emitProgressMessage("")
@@ -610,7 +618,7 @@ class MiniDiff(Equipment):
         def centre_loop(pixelsPerMmY, pixelsPerMmZ): #, lastCoord=(-1, -1)):
           X = []
           Y = []
-          phiSavedDialPosition = 327.3 #phi.getDialPosition()
+          phiSavedDialPosition = 327.3 # phi.getDialPosition()
          
           self.emitProgressMessage("Doing automatic centring")
           a = 0
@@ -647,8 +655,8 @@ class MiniDiff(Equipment):
             else:
               X.append(x); Y.append(y)
               
-          beam_xc = imgWidth / 2
-          beam_yc = imgHeight / 2
+          beam_xc = self.getBeamPosX()
+          beam_yc = self.getBeamPosY()
           yc = (Y[0]+Y[2]) / 2
           y =  Y[0] - yc
           x =  yc - Y[1]
@@ -769,14 +777,14 @@ class MiniDiff(Equipment):
 
     def emitCentringSuccessful(self):
         if self.currentCentringProcedure is not None:
-            logging.info("MiniDiff: emitting centringSuccessful ")
             curr_time=time.strftime("%Y-%m-%d %H:%M:%S")
             self.centringStatus["endTime"]=curr_time
 
             motors = {}
             motor_pos = self.currentCentringProcedure.get()
-            for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi'):
+            for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi', 'focus', 'kappa', 'kappa_phi'):
                 mot_obj = self.getDeviceByRole(motor_role)
+
                 try:
                     motors[motor_role] = motor_pos[mot_obj] 
                 except KeyError:
@@ -808,7 +816,10 @@ class MiniDiff(Equipment):
                "phiy": self.phiyMotor.getPosition(),
                "phiz": self.phizMotor.getPosition(),
                "sampx": self.sampleXMotor.getPosition(),
-               "sampy": self.sampleYMotor.getPosition() }
+               "sampy": self.sampleYMotor.getPosition(),
+               "kappa": self.kappaMotor.getPosition(),
+               "kappa_phi": self.kappaPhiMotor.getPosition(),
+               "zoom": self.zoomMotor.getPosition()}
     
 
     def takeSnapshots(self, wait=False):
@@ -821,7 +832,7 @@ class MiniDiff(Equipment):
         # if not centring_valid:
         #     logging.getLogger("HWR").error("MiniDiff: you must centre the crystal before taking the snapshots")
         # else:
-        snapshotsProcedure = gevent.spawn(take_snapshots, self.lightWago,self.phiMotor,self.zoomMotor,self._drawing)
+        snapshotsProcedure = gevent.spawn(take_snapshots, self.lightWago, self.lightMotor ,self.phiMotor,self.zoomMotor,self._drawing)
         self.emit('centringSnapshots', (None,))
         self.emitProgressMessage("Taking snapshots")
         self.centringStatus["images"]=[]
@@ -844,7 +855,7 @@ class MiniDiff(Equipment):
            self.emit('centringSnapshots', (True,))
            self.emitProgressMessage("")
         self.emitProgressMessage("Sample is centred!")
-        self.emit('centringAccepted', (True,self.getCentringStatus()))
+        #self.emit('centringAccepted', (True,self.getCentringStatus()))
 
 
 

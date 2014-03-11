@@ -50,7 +50,7 @@ class BLEnergy (Device) :
             
         # parameters for polling     
         if self.deviceOk :
-            self.isConnected()
+            self.sConnected()
             self.prev_state = str( self.BLEnergydevice.State() )
             energyChan = self.getChannelObject("energy") 
             energyChan.connectSignal("update", self.energyChanged)
@@ -90,13 +90,13 @@ class BLEnergy (Device) :
         return True
 
 
-    def isConnected(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.isConnected", self.name())
+    def sConnected(self):
+        #logging.getLogger("HWR").debug("%s: BLEnergy.sConnected", self.name())
         self.deviceOk = True
         self.emit('connected', ())
       
-    def isDisconnected(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.isDisconnected", self.name())
+    def sDisconnected(self):
+        #logging.getLogger("HWR").debug("%s: BLEnergy.sDisconnected", self.name())
         self.deviceOk = False
         self.emit('disconnected', ())
 
@@ -144,8 +144,8 @@ class BLEnergy (Device) :
             max = float(enconfig.max_value)
             min = float(enconfig.min_value)
             lims = [min,max]
-            logging.getLogger("HWR").info("HOS : energy Limits: %.4f %.4f" % \
-                                          tuple(lims))       
+
+            logging.getLogger("HWR").info("HOS : energy Limits: %.4f %.4f" % lims)       
             return lims
         else :
             return None

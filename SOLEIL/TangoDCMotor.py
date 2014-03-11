@@ -171,17 +171,20 @@ class TangoDCMotor(Device):
         Arguments:
         absolutePosition -- position to move to
         """
+        logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: type '%s'", absolutePosition, type(absolutePosition))
         if type(absolutePosition) != float and type(absolutePosition) != int:
-            logging.getLogger("TangoClient").error("Cannot move %s: position '%s' is not a number. It is a %s", self.tangoname, absolutePosition, type(absolutePosition))
-            
-        logging.getLogger("HWR").info("TangoDCMotor.move to absolute position: %.3f" % absolutePosition)
-        logging.getLogger("TangoClient").error("TangoDCMotor move. Trying to go to %s: that is a '%s'", absolutePosition, type(absolutePosition))
-        self.positionChan.setValue( self.convertValue(absolutePosition) )
+            logging.getLogger("TangoClient").error("Cannot move %s: position '%s' is not a number. It is a %s", \
+                self.tangoname, absolutePosition, type(absolutePosition))
+            self.positionChan.setValue(self.convertValue(absolutePosition))
+        else:
+            logging.getLogger("HWR").info("TangoDCMotor.move to absolute position: %.3f" % absolutePosition)
+            self.positionChan.setValue(absolutePosition)
 
     def stop(self):
         logging.getLogger("HWR").info("TangoDCMotor.stop")
         stopcmd = self.getCommandObject("Stop")()
         if not stopcmd:
+           logging.getLogger("HWR").info("TangoDCMotor. No stop command defined.")
            stopcmd = TangoCommand("stopcmd","Stop",self.tangoname)
         stopcmd()
 
