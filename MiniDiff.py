@@ -21,8 +21,7 @@ except ImportError:
 USER_CLICKED_EVENT = AsyncResult()
 
 
-def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, 
-                    beam_xc, beam_yc, phiy_direction=1):
+def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, beam_xc, beam_yc, phiy_direction=1):
   global USER_CLICKED_EVENT
   X, Y = [], []
   centredPosRel = {}
@@ -112,6 +111,7 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
         light_level = zoom['positions'][0][zoom_level].getProperty('lightLevel')
       except IndexError:
         logging.getLogger("HWR").info("Could not get default light level")
+        light_level = 1
 
       if light_level:
         light_motor.move(light_level)
@@ -154,6 +154,7 @@ class MiniDiff(Equipment):
         self.imgWidth = None
         self.imgHeight = None
         self.centredTime = 0
+        self.user_confirms_centring = True
 
         self.connect(self, 'equipmentReady', self.equipmentReady)
         self.connect(self, 'equipmentNotReady', self.equipmentNotReady)     
@@ -315,12 +316,6 @@ class MiniDiff(Equipment):
     def isReady(self):
       if self.isValid():
          motorsQuiet = True 
-         #logging.info("Motor sampleX is %s" % str(self.sampleYMotor) )
-         #logging.info("Motor sampleY is %s" % str(self.sampleYMotor) )
-         #logging.info("Motor zoom is %s" % str(self.zoomMotor) )
-         #logging.info("Motor phi is %s" % str(self.phiMotor) )
-         #logging.info("Motor phiz is %s" % str(self.phizMotor) )
-         #logging.info("Motor phiy is %s" % str(self.phiyMotor) )   
          for m in (self.sampleXMotor, self.sampleYMotor, self.zoomMotor, self.phiMotor, self.phizMotor, self.phiyMotor):
             if m.motorIsMoving():
                  motorsQuiet = False
@@ -439,6 +434,10 @@ class MiniDiff(Equipment):
 
     def getBeamPosY(self):
         return self.imgHeight / 2
+
+    def getBeamInfo(self, update_beam_callback):
+        get_beam_info = self.getCommandObject("getBeamInfo")
+        get_beam_info(callback=update_beam_callback, error_callback=None, wait=True)
 
     def moveToBeam(self, x, y):
         try:
@@ -561,7 +560,6 @@ class MiniDiff(Equipment):
             self.emitCentringFailed()
           else:
             self.phiMotor.syncMoveRelative(-180)
-          #logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
           self.emitCentringSuccessful()
           self.emitProgressMessage("")
@@ -590,7 +588,11 @@ class MiniDiff(Equipment):
           logging.error("Could not complete automatic centring")
           self.emitCentringFailed()
         else:
-          self.emitCentringSuccessful()
+          if self.user_confirms_centring:
+            self.emitCentringSuccessful()
+          else:
+            self.emitCentringSuccessful()
+            self.acceptCentring()
               
 
     def do_auto_centring(self, phi, phiy, phiz, sampx, sampy, zoom, camera, phiy_direction):
@@ -821,6 +823,29 @@ class MiniDiff(Equipment):
                "kappa_phi": self.kappaPhiMotor.getPosition(),
                "zoom": self.zoomMotor.getPosition()}
     
+
+    def moveMotors(self, roles_positions_dict):
+        motor = { "phi": self.phiMotor,
+                  "focus": self.focusMotor,
+                  "phiy": self.phiyMotor,
+                  "phiz": self.phizMotor,
+                  "sampx": self.sampleXMotor,
+                  "sampy": self.sampleYMotor,
+                  "kappa": self.kappaMotor,
+                  "kappa_phi": self.kappaPhiMotor,
+                  "zoom": self.zoomMotor }
+   
+        for role, pos in roles_positions_dict.iteritems():
+           motor[role].move(pos)
+ 
+        # TODO: remove this sleep, the motors states should
+        # be MOVING since the beginning (or READY if move is
+        # already finished) 
+        time.sleep(1)
+ 
+        while not all([m.getState() == m.READY for m in motor.itervalues()]):
+           time.sleep(0.1)
+
 
     def takeSnapshots(self, wait=False):
         self.camera.forceUpdate = True

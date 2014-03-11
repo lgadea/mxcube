@@ -7,23 +7,12 @@ The Queue manager acts as both the controller of execution and as the root/
 container of the queue, note the inheritance from QueueEntryContainer. See the
 documentation for the queue_entry module for more information.
 """
-
 import logging
 import gevent
 import queue_entry
 
-from HardwareRepository.TaskUtils import task
 from HardwareRepository.BaseHardwareObjects import HardwareObject
 from queue_entry import QueueEntryContainer
-
-__author__ = "Marcus Oskarsson"
-__copyright__ = "Copyright 2012, ESRF"
-__credits__ = ["My great coleagues", "The MxCuBE colaboration"]
-
-__version__ = "0.1"
-__maintainer__ = "Marcus Oskarsson"
-__email__ = "marcus.oscarsson@esrf.fr"
-__status__ = "Beta"
 
 
 logger = logging.getLogger('queue_exec')
@@ -107,14 +96,15 @@ class QueueManager(HardwareObject, QueueEntryContainer):
 
                 if isinstance(ex, queue_entry.QueueAbortedException):
                     logging.getLogger('user_level_log').\
-                        warning('Queue execution was aborted, queue stopped. ' + ex.message)
+                        warning('Queue execution was aborted, ' + str(ex.message))
                 else:
                     logging.getLogger('user_level_log').\
-                        error('Queue execution failed with: ' + ex.message)
+                        error('Queue execution failed with: ' + str(ex.message))
+
                 self._running = False
                 raise ex
-               
-        self._running = False    
+
+        self._running = False
         self.emit('queue_execution_finished', (None,))
 
     def __execute_entry(self, entry): 
@@ -123,14 +113,11 @@ class QueueManager(HardwareObject, QueueEntryContainer):
         if not entry.is_enabled():
             return
 
-        logging.getLogger('queue_exec').info('Calling execute on: ' \
-                                             + str(entry))
-        logging.getLogger('queue_exec').info('Using model: ' + \
-                                             str(entry.get_data_model()))
+        logging.getLogger('queue_exec').info('Calling execute on: ' + str(entry))
+        logging.getLogger('queue_exec').info('Using model: ' + str(entry.get_data_model()))
 
         if self.is_paused():
-            logging.getLogger('user_level_log').info('Queue paused,' +\
-                                                     'waiting ...')
+            logging.getLogger('user_level_log').info('Queue paused, waiting ...')
             entry.get_view().setText(1, 'Queue paused, waiting')
 
         self.wait_for_pause_event()
@@ -168,10 +155,13 @@ class QueueManager(HardwareObject, QueueEntryContainer):
         :returns: None
         :rtype: NoneType
         """
-        try:
-            self.get_current_entry().stop()
-        except queue_entry.QueueAbortedException:
-            pass
+        qe = self.get_current_entry()
+
+        if qe:
+            try:
+                self.get_current_entry().stop()
+            except queue_entry.QueueAbortedException:
+                pass
 
         self._root_task.kill(block = False)
         # Reset the pause event, incase we were waiting.
