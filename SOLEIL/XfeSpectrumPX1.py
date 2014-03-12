@@ -211,7 +211,7 @@ class XfeSpectrumPX1(Equipment):
     def spectrumCommandFinished(self, result):
         self.spectrumInfo['endTime'] = time.strftime("%Y-%m-%d %H:%M:%S")
         logging.getLogger().debug(
-            "XRFSpectrum: XRF spectrum result is %s" % result)
+            "XRFSpectrum: XRF spectrum result is %s" % str(result))
         self.scanning = False
 
         if result == 0:
