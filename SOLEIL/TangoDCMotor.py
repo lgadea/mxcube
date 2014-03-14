@@ -5,6 +5,8 @@ import time
 from HardwareRepository.BaseHardwareObjects import Device
 from HardwareRepository.Command.Tango import TangoCommand
 
+from PyTango import DeviceProxy
+
 from qt import qApp
 
 class TangoDCMotor(Device):
@@ -134,6 +136,7 @@ class TangoDCMotor(Device):
         prev_position      = self.getPosition()
         self.positionValue = position
 
+        time.sleep(0.5) # allow MD2 to change the state
         while self.stateValue == "RUNNING" or self.stateValue == "MOVING": # or self.stateValue == SpecMotor.MOVESTARTED:
             qApp.processEvents(100)
 
@@ -156,9 +159,19 @@ class TangoDCMotor(Device):
     def syncMoveRelative(self, position):
         old_pos = self.positionValue
         self.positionValue = old_pos + position
+        logging.info("TangoDCMotor: syncMoveRelative going to %s " % str( self.convertValue(self.positionValue)))
         self.positionChan.setValue( self.convertValue(self.positionValue) )
 
-        while self.stateValue == "RUNNING" or self.stateValue == "MOVING":
+        dev = DeviceProxy(self.tangoname)
+        time.sleep(0.5) # allow MD2 to change the state
+
+        mystate = str( dev.State() )
+        logging.info("TangoDCMotor: %s syncMoveRelative state is %s / %s " % ( self.tangoname, str( self.stateValue ), mystate))
+
+        while mystate == "RUNNING" or mystate == "MOVING":
+            logging.info("TangoDCMotor: syncMoveRelative is moving %s" % str( mystate ))
+            time.sleep(0.1)
+            mystate = str( dev.State() )
             qApp.processEvents(100)
         
     def getMotorMnemonic(self):

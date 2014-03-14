@@ -76,6 +76,7 @@ def move_to_centred_position(centred_pos):
     motor.move(pos)
 
   with gevent.Timeout(15):
+    time.sleep(1)  # this is because the motors are not yet moving  (with current MD2 software)
     while not all([m.getState() == m.READY for m in centred_pos.iterkeys()]):
       time.sleep(0.1)
 
@@ -121,10 +122,12 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
 
     while light.getWagoState()!="in":
       time.sleep(0.5)
+
   for i in range(4):
      logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
      centredImages.append((phi.getPosition(),str(myimage(drawing))))
      phi.syncMoveRelative(-90)
+     time.sleep(2)
 
   centredImages.reverse() # snapshot order must be according to positive rotation direction
 
@@ -410,6 +413,7 @@ class MiniDiff(Equipment):
 
 
     def invalidateCentring(self):
+        logging.info("Invalidating centring manualCentringProcedure is %s", str(self.currentCentringProcedure) )
         if self.currentCentringProcedure is None and self.centringStatus["valid"]:
             self.centringStatus={"valid":False}
             self.emitProgressMessage("")
@@ -417,26 +421,26 @@ class MiniDiff(Equipment):
 
 
     def phizMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
+        #if time.time() - self.centredTime > 2.0:
           self.invalidateCentring()
 
     def phiyMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
+        #if time.time() - self.centredTime > 2.0:
            self.invalidateCentring()
 
 
     def sampleXMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
+        #if time.time() - self.centredTime > 2.0:
            self.invalidateCentring()
 
 
     def sampleYMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
+        #if time.time() - self.centredTime > 2.0:
            self.invalidateCentring()
 
 
     def sampleChangerSampleIsLoaded(self, state):
-        if time.time() - self.centredTime > 1.0:
+        #if time.time() - self.centredTime > 2.0:
            self.invalidateCentring()
 
     def getBeamPosX(self):
@@ -562,17 +566,19 @@ class MiniDiff(Equipment):
           logging.exception("Could not complete manual centring")
           self.emitCentringFailed()
         else:
-          logging.info("Moving sample to centred position")
+          logging.info("Moving sample to centred position. manualCentringProcedure: %s", str(self.currentCentringProcedure) )
           self.emitProgressMessage("Moving sample to centred position...")
           self.emitCentringMoving()
           try:
             move_to_centred_position(motor_pos, wait = True)
           except:
+            import traceback
             logging.exception("Could not move to centred position")
+            logging.debug( traceback.format_exc() )
             self.emitCentringFailed()
           else:
             self.phiMotor.syncMoveRelative(-180)
-          self.centredTime = time.time()
+          self.emitProgressMessage("    - moved to centred position finished")
           self.emitCentringSuccessful()
           self.emitProgressMessage("")
 
@@ -587,7 +593,7 @@ class MiniDiff(Equipment):
 
         return move_to_centred_position(motor_pos, wait=wait)
       except:
-        logging.exception("Could not move to centred position")
+        logging.exception("Could not move to centred position (2)")
 
 
     def autoCentringDone(self, auto_centring_procedure):
@@ -895,7 +901,7 @@ class MiniDiff(Equipment):
            self.emit('centringSnapshots', (True,))
            self.emitProgressMessage("")
         self.emitProgressMessage("Sample is centred!")
-        #self.emit('centringAccepted', (True,self.getCentringStatus()))
+        self.emit('centringAccepted', (True,self.getCentringStatus()))
 
 
 
