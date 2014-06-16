@@ -36,6 +36,7 @@ class TangoResolutionComplex(BaseHardwareObjects.Equipment):
         
     stateDict = {
          "UNKNOWN": 0,
+         "OFF":     1,
          "ALARM":   1,
          "STANDBY": 2,
          "RUNNING": 4,

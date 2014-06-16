@@ -1,39 +1,35 @@
 # -*- coding: utf-8 -*-
 from qt import *
 from HardwareRepository.BaseHardwareObjects import Equipment
+from HardwareRepository.TaskUtils import *
 import logging
 import PyChooch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-#from SpecClient import SpecClientError
-#from SpecClient import SpecVariable
-#from SpecClient import SpecConnectionsManager
-#from SpecClient import SpecEventsDispatcher
-#from SimpleDevice2c import SimpleDevice #MS 05.03.2013
 import os
 import time
 import types
 import math
 from xabs_lib import *
-#from simple_scan_class import *
 import string
-#MS 05.03.2013
 from PyTango import DeviceProxy
 import numpy
 import pickle
+import gevent
 
-class EnergyScan(Equipment):
+class EnergyScanPX2(Equipment):
     
     MANDATORY_HO={"BLEnergy":"BLEnergy"}
     
     
     def init(self):
+        self.ready_event = gevent.event.Event()
         self.scanning = None
 #        self.moving = None
         self.scanThread = None
         self.pk = None
         self.ip = None
-        self.roiwidth = 0.35 # en keV largeur de la roi 
+        self.roiwidth = 0.3 # en keV largeur de la roi 
         self.before = 0.10  #  en keV Ecart par rapport au seuil pour le point de depart du scan
         self.after = 0.20   # en keV Ecart par rapport au seuil pour le dernier point du scan
         self.canScan = True
@@ -69,7 +65,7 @@ class EnergyScan(Equipment):
         self.before = paramscan.before
         self.after = paramscan.after
         self.nbsteps = paramscan.nbsteps
-        self.integrationTime = paramscan.integrationtime
+        self.integrationtime = paramscan.integrationtime
       
       
         print "self.roiwidth :", self.roiwidth
@@ -149,41 +145,26 @@ class EnergyScan(Equipment):
             logging.getLogger("HWR").error("%s not found" %(self.getProperty("attenuator")))
             self.canScan = False
         
-#        try :    
-#            self.md2device = DeviceProxy(self.getProperty("md2")) #, verbose=False)
-#            self.md2device.timeout = 2000
-#        except :    
-#            logging.getLogger("HWR").error("%s not found" %(self.getProperty("md2")))
-#            self.canScan = False
+        try :    
+            self.md2device = DeviceProxy(self.getProperty("md2")) #, verbose=False)
+            self.md2device.timeout = 2000
+        except :    
+            logging.getLogger("HWR").error("%s not found" %(self.getProperty("md2")))
+            self.canScan = False
         
         try:
-            self.lightdevice = DeviceProxy(self.getProperty("lightextract")) #, verbose=False)
-            self.lightdevice.timeout = 2000
+            self.safetyshutterdevice = DeviceProxy(self.getProperty("safetyshutter")) #, verbose=False)
+            self.safetyshutterdevice.timeout = 2000
         except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("lightextract")))
+            logging.getLogger("HWR").error("%s not found" %(self.getProperty("safetyshutter")))
             self.canScan = False
-
-        try:
+        
+        try :    
             self.bstdevice = DeviceProxy(self.getProperty("bst")) #, verbose=False)
-            self.bstdevice.timeout = 2000
+            self.bstdevice.timeout = 6000
         except :    
             logging.getLogger("HWR").error("%s not found" %(self.getProperty("bst")))
             self.canScan = False
-
-        try:
-            self.ketekinsertdevice = DeviceProxy(self.getProperty("ketekinsert")) #, verbose=False)
-            self.ketekinsertdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("ketekinsert")))
-            self.canScan = False
-
-        try:
-            self.fastshutterdevice = DeviceProxy(self.getProperty("fastshutter")) #, verbose=False)
-            self.fastshutterdevice.timeout = 2000
-        except :    
-            logging.getLogger("HWR").error("%s not found" %(self.getProperty("fastshutter")))
-            self.canScan = False
-        
                             
     def isConnected(self):
         return self.isSpecConnected()
@@ -220,6 +201,9 @@ class EnergyScan(Equipment):
                         session_id = None, 
                         blsample_id = None):
         
+        self._scan_edge    = edge
+        self._scan_element = element
+
         logging.getLogger("HWR").debug('EnergyScan:startEnergyScan')
         print 'edge', edge
         print 'element', element
@@ -251,6 +235,7 @@ class EnergyScan(Equipment):
         logging.getLogger("HWR").debug('EnergyScan:cancelEnergyScan')
         if self.scanning:
             self.scanning = False
+            self.ready_event.set()
             
     def scanCommandReady(self):
         logging.getLogger("HWR").debug('EnergyScan:scanCommandReady')
@@ -275,25 +260,215 @@ class EnergyScan(Equipment):
         self.scanning = False
         self.storeEnergyScan()
         self.emit('energyScanFailed', ())
+        self.ready_event.set()
         
     def scanCommandAborted(self):
         logging.getLogger("HWR").debug('EnergyScan:scanCommandAborted')
     
     def scanCommandFinished(self,result):
-        logging.getLogger("HWR").debug("EnergyScan: energy scan result is %s" % result)
-        self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
-        self.scanning = False
-        if result==-1:
+        with cleanup(self.ready_event.set):
+            logging.getLogger("HWR").debug("EnergyScan: energy scan result is %s" % result)
+            self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
+            self.scanning = False
+            if result==-1:
+                self.storeEnergyScan()
+                self.emit('scanStatusChanged', ("Scan aborted",))
+                self.emit('energyScanFailed', ())
+                return
+    
             self.storeEnergyScan()
-            self.emit('scanStatusChanged', ("Scan aborted",))
-            self.emit('energyScanFailed', ())
+            #self.scanInfo=None
+
+            try:
+              t = float(result["transmissionFactor"])
+            except:
+              pass
+            else:
+              self.scanInfo["transmissionFactor"]=t
+            try:
+                et=float(result['exposureTime'])
+            except:
+                pass
+            else:
+                self.scanInfo["exposureTime"]=et
+            try:
+                se=float(result['startEnergy'])
+            except:
+                pass
+            else:
+                self.scanInfo["startEnergy"]=se
+            try:
+                ee=float(result['endEnergy'])
+            except:
+                pass
+            else:
+                self.scanInfo["endEnergy"]=ee
+
+            try:
+                bsX=float(result['beamSizeHorizontal'])
+            except:
+                pass
+            else:
+                self.scanInfo["beamSizeHorizontal"]=bsX
+
+            try:
+                bsY=float(result['beamSizeVertical'])
+            except:
+                pass
+            else:
+                self.scanInfo["beamSizeVertical"]=bsY
+
+            try:
+                self.thEdge=float(result['theoreticalEdge'])/1000.0
+                self.thEdge=self._scan_edge
+            except:
+                pass
+
+            self.emit('energyScanFinished', (self.scanInfo,))
+
+        
+
+    def doChooch(self, scanObject, elt, edge, scanArchiveFilePrefix, scanFilePrefix):
+        symbol = "_".join((elt, edge))
+        scanArchiveFilePrefix = "_".join((scanArchiveFilePrefix, symbol))
+
+        i = 1
+        while os.path.isfile(os.path.extsep.join((scanArchiveFilePrefix + str(i), "raw"))):
+            i = i + 1
+
+        scanArchiveFilePrefix = scanArchiveFilePrefix + str(i) 
+        archiveRawScanFile=os.path.extsep.join((scanArchiveFilePrefix, "raw"))
+        rawScanFile=os.path.extsep.join((scanFilePrefix, "raw"))
+        scanFile=os.path.extsep.join((scanFilePrefix, "efs"))
+
+        if not os.path.exists(os.path.dirname(scanArchiveFilePrefix)):
+            os.makedirs(os.path.dirname(scanArchiveFilePrefix))
+        
+        try:
+            f=open(rawScanFile, "w")
+            pyarch_f=open(archiveRawScanFile, "w")
+        except:
+            logging.getLogger("HWR").exception("could not create raw scan files")
+            self.storeEnergyScan()
+            self.emit("energyScanFailed", ())
             return
+        else:
+            scanData = []
+            
+            if scanObject is None:                
+                raw_data_file = os.path.join(os.path.dirname(scanFilePrefix), 'data.raw')
+                try:
+                    raw_file = open(raw_data_file, 'r')
+                except:
+                    self.storeEnergyScan()
+                    self.emit("energyScanFailed", ())
+                    return
+                
+                for line in raw_file.readlines()[2:]:
+                    (x, y) = line.split('\t')
+                    x = float(x.strip())
+                    y = float(y.strip())
+                    x = x < 1000 and x*1000.0 or x
+                    scanData.append((x, y))
+                    f.write("%f,%f\r\n" % (x, y))
+                    pyarch_f.write("%f,%f\r\n"% (x, y))
+            else:
+                for i in range(len(scanObject.x)):
+                    x = float(scanObject.x[i])
+                    x = x < 1000 and x*1000.0 or x 
+                    y = float(scanObject.y[i])
+                    scanData.append((x, y))
+                    f.write("%f,%f\r\n" % (x, y))
+                    pyarch_f.write("%f,%f\r\n"% (x, y)) 
+
+            f.close()
+            pyarch_f.close()
+            self.scanInfo["scanFileFullPath"]=str(archiveRawScanFile)
+
+        pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, chooch_graph_data = PyChooch.calc(scanData, elt, edge, scanFile)
+        rm=(pk+30)/1000.0
+        pk=pk/1000.0
+        savpk = pk
+        ip=ip/1000.0
+        comm = ""
+        logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge, pk,ip,rm))
+
+        if math.fabs(self.thEdge - ip) > self.thEdgeThreshold:
+          pk = 0
+          ip = 0
+          rm = self.thEdge + 0.03
+          comm = 'Calculated peak (%f) is more that 10eV away from the theoretical value (%f). Please check your scan' % (savpk, self.thEdge)
+   
+          logging.getLogger("HWR").warning('EnergyScan: calculated peak (%f) is more that 20eV %s the theoretical value (%f). Please check your scan and choose the energies manually' % (savpk, (self.thEdge - ip) > 0.02 and "below" or "above", self.thEdge))
+
+        archiveEfsFile=os.path.extsep.join((scanArchiveFilePrefix, "efs"))
+        try:
+          fi=open(scanFile)
+          fo=open(archiveEfsFile, "w")
+        except:
+          self.storeEnergyScan()
+          self.emit("energyScanFailed", ())
+          return
+        else:
+          fo.write(fi.read())
+          fi.close()
+          fo.close()
+
+        self.scanInfo["peakEnergy"]=pk
+        self.scanInfo["inflectionEnergy"]=ip
+        self.scanInfo["remoteEnergy"]=rm
+        self.scanInfo["peakFPrime"]=fpPeak
+        self.scanInfo["peakFDoublePrime"]=fppPeak
+        self.scanInfo["inflectionFPrime"]=fpInfl
+        self.scanInfo["inflectionFDoublePrime"]=fppInfl
+        self.scanInfo["comments"] = comm
+
+        chooch_graph_x, chooch_graph_y1, chooch_graph_y2 = zip(*chooch_graph_data)
+        chooch_graph_x = list(chooch_graph_x)
+        for i in range(len(chooch_graph_x)):
+          chooch_graph_x[i]=chooch_graph_x[i]/1000.0
+
+        logging.getLogger("HWR").info("<chooch> Saving png" )
+        # prepare to save png files
+        title="%10s  %6s  %6s\n%10s  %6.2f  %6.2f\n%10s  %6.2f  %6.2f" % ("energy", "f'", "f''", pk, fpPeak, fppPeak, ip, fpInfl, fppInfl) 
+        fig=Figure(figsize=(15, 11))
+        ax=fig.add_subplot(211)
+        ax.set_title("%s\n%s" % (scanFile, title))
+        ax.grid(True)
+        ax.plot(*(zip(*scanData)), **{"color":'black'})
+        ax.set_xlabel("Energy")
+        ax.set_ylabel("MCA counts")
+        ax2=fig.add_subplot(212)
+        ax2.grid(True)
+        ax2.set_xlabel("Energy")
+        ax2.set_ylabel("")
+        handles = []
+        handles.append(ax2.plot(chooch_graph_x, chooch_graph_y1, color='blue'))
+        handles.append(ax2.plot(chooch_graph_x, chooch_graph_y2, color='red'))
+        canvas=FigureCanvasAgg(fig)
+
+        escan_png = os.path.extsep.join((scanFilePrefix, "png"))
+        escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png")) 
+        self.scanInfo["jpegChoochFileFullPath"]=str(escan_archivepng)
+        try:
+          logging.getLogger("HWR").info("Rendering energy scan and Chooch graphs to PNG file : %s", escan_png)
+          canvas.print_figure(escan_png, dpi=80)
+        except:
+          logging.getLogger("HWR").exception("could not print figure")
+        try:
+          logging.getLogger("HWR").info("Saving energy scan to archive directory for ISPyB : %s", escan_archivepng)
+          canvas.print_figure(escan_archivepng, dpi=80)
+        except:
+          logging.getLogger("HWR").exception("could not save figure")
 
         self.storeEnergyScan()
-        self.emit('energyScanFinished', (self.scanInfo,))
         self.scanInfo=None
-        
-    def doChooch(self, scanObject, scanDesc):
+
+        logging.getLogger("HWR").info("<chooch> returning" )
+        self.emit('chooch_finished', (pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title))
+        return pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title
+
+    def doChooch_old(self, scanObject, scanDesc):
                  #elt, 
                  #edge):
                  #scanArchiveFilePrefix = 'scanArchiveFilePrefix', 
@@ -509,6 +684,7 @@ class EnergyScan(Equipment):
         self.scanCommandStarted()
         self.pk = None
         self.ip = None
+        logging.debug("DOING ENERGY SCAN: e_edge = %5.4f , roi_center = %5.4f" % (e_edge, roi_center)  )
         self.scanThread = EnergyScanThread(self,
                                            e_edge,
                                            roi_center,
@@ -539,7 +715,7 @@ class EnergyScan(Equipment):
         backlash = 0.1 # en mmte
         gaplimite = 5.5  # en mm
         self.doBacklashCompensation = False # True #MS 2013-05-21
-#        self.mono_mt_rx_device.On()
+        self.mono_mt_rx_device.On()
         #time.sleep(5)
         
         if (str(self.BLEnergydevice.State()) != "MOVING") :# MS .State -> .State() 06.03.2013
@@ -598,10 +774,27 @@ class EnergyScanThread(QThread):
         self.e_edge     = e_edge
         self.roi_center = roi_center
         self.filenameIn = filenameIn
-#        self.mrtx = DeviceProxy('i11-ma-c03/op/mono1-mt_rx')
+        self.mrtx = DeviceProxy('i11-ma-c03/op/mono1-mt_rx')
         self.miniSteps = 1 #30
         self.integrationTime = 1.
+
+        self.resultValues = {
+            'transmissionFactor':  None,
+            'exposureTime':  None,
+            'startEnergy':  None,
+            'endEnergy':  None,
+            'beamSizeHorizontal':  None,
+            'beamSizeVertical':  None,
+            'theoreticalEdge':  None,
+        }
+      
+    def wait(self, device):
+        while device.state().name == 'MOVING':
+            time.sleep(.1)
         
+        while device.state().name == 'RUNNING':
+            time.sleep(.1)
+
     def run(self):
         self.result = -1
         logging.getLogger("HWR").debug('EnergyScanThread:run')
@@ -611,7 +804,9 @@ class EnergyScanThread(QThread):
 #        if self.parent.BLEnergyHO is not None:
 #            self.parent.connect(self.parent.BLEnergyHO,qt.PYSIGNAL('setEnergy'),self.energyChanged)
 #             self.parent.BLEnergyHO.setEnergy(7.0)
+        
         self.prepare4EScan()
+        logging.getLogger("HWR").debug('EnergyScanThread: starting Scan (fileName %s)' % self.filenameIn)
         self.scan (((self.parent.counterdevice, "counter1"), (self.parent.xbpmdevice, "intensity")), # sSensors
                     (self.parent.monodevice, "energy"),                                              # sMotor
                      self.e_edge - self.parent.before,                                               # sStart
@@ -621,12 +816,19 @@ class EnergyScanThread(QThread):
                      integrationTime = self.integrationTime/self.miniSteps) #integrationTime=self.parent.integrationtime
         
         
+        logging.getLogger("HWR").debug('EnergyScanThread: Scan finished %s' % str(self.result)) 
         self.parent.scanCommandFinished(self.result)
         self.afterScan()
    
+    def optimizeTransmission(self):
+        import XfeCollect
+        self.xfe = XfeCollect.XfeCollect(directory='/tmp/opt_test')
+        self.xfe.optimizeTransmission(self.parent.element, self.parent.edge)
+
     def prepare4EScan(self):
         logging.getLogger("HWR").debug('EnergyScanThread:prepare4EScan')
-#        self.mrtx.On()
+        self.mrtx.On()
+        logging.getLogger("HWR").debug('EnergyScanThread:prepare4EScan (2)')
         
         self.parent.connectTangoDevices()
         if not self.parent.canScan :     
@@ -649,14 +851,15 @@ class EnergyScanThread(QThread):
         #conversion factor: 2048 channels correspond to 20,000 eV hence we have approx 10eV per channel
         #channelToeV = self.parent.fluodetdevice.dynamicRange / len(self.parent.fluodetdevice.channel00)
         channelToeV = 10. #MS 2013-05-23
+        
         roi_debut = 1000.0*(self.roi_center - self.parent.roiwidth / 2.0) #values set in eV
         roi_fin   = 1000.0*(self.roi_center + self.parent.roiwidth / 2.0) #values set in eV
         print 'roi_debut', roi_debut
         print 'roi_fin', roi_fin
         
         
-        channel_debut = int(roi_debut / channelToeV) 
-        channel_fin   = int(roi_fin / channelToeV)
+        channel_debut = int(roi_debut / channelToeV) + 7
+        channel_fin   = int(roi_fin / channelToeV) + 7
         print 'channel_debut', channel_debut
         print 'channel_fin', channel_fin
         
@@ -665,9 +868,17 @@ class EnergyScanThread(QThread):
         #roi_debut = 1120.
         #roi_fin = 1124.
         ##### remove for production ####
-       
-        self.parent.fluodetdevice.SetROIs(numpy.array((channel_debut, channel_fin)))
-        time.sleep(0.1)
+
+        try:
+            #self.xfe.setROI(channel_debut, channel_fin)
+            self.parent.fluodetdevice.SetROIs(numpy.array((channel_debut, channel_fin)))
+            time.sleep(0.1)
+        except:
+            import traceback
+            traceback.print_exc()
+            time.sleep(1)
+            
+        self.optimizeTransmission()
         #self.parent.fluodetdevice.integrationTime = 0
         
         # Beamline Energy Positioning and Attenuation setting
@@ -677,15 +888,15 @@ class EnergyScanThread(QThread):
         #self.parent.attdevice.computedAttenuation = currentAtt
         
         # Positioning Light, BST, Rontec
-        self.parent.lightdevice.Extract()
-#        self.parent.md2device.write_attribute('BackLightIsOn', False)
+        #self.parent.lightdevice.Extract()
+        self.parent.md2device.write_attribute('BackLightIsOn', False)
         time.sleep(1)
-#        self.parent.bstdevice.Insert()
-        self.parent.ketekinsertdevice.Insert()
-#        self.parent.md2device.write_attribute('FluoDetectorBack', 0)
+        #self.parent.bstdevice.Insert()
+        #self.parent.rontecinsertdevice.Insert()
+        self.parent.md2device.write_attribute('FluoDetectorBack', 0)
         time.sleep(4)
-#        self.parent.safetyshutterdevice.Open()
-        while self.parent.ketekinsertdevice.State().name == "MOVING" or self.parent.BLEnergydevice.State().name == "MOVING":
+        self.parent.safetyshutterdevice.Open()
+        while self.parent.md2device.State().name == "MOVING" or self.parent.BLEnergydevice.State().name == "MOVING":
             time.sleep(1)
     
     def scan(self,
@@ -745,8 +956,8 @@ class EnergyScanThread(QThread):
         print "sSensorDevices", sSensorDevices                
         print "nbSensors = ", nbSensors
         print "Motor  = %s" % sMotorDevice.name()
-        print "Scanning %s from %f to %f by steps of %f (nsteps = %d)" % \
-                    (sMotorDevice.name(),sStart, sEnd, sStepSize, nbSteps)
+        logging.debug( "Scanning %s from %f to %f by steps of %f (nsteps = %d)" % \
+                    (sMotorDevice.name(),sStart, sEnd, sStepSize, nbSteps))
         
         t  = time.localtime()
         sDate = "%02d/%02d/%d - %02d:%02d:%02d" %(t[2],t[1],t[0],t[3],t[4],t[5])
@@ -793,6 +1004,7 @@ class EnergyScanThread(QThread):
         #collectRecord['DataPoints'] = {}
         
         # Ecriture de l'entete du fichier
+        logging.debug( "    energy scan thread saving data to %s " % sFileName)
         try :
             f = open(sFileName, "w")
         except :
@@ -816,7 +1028,7 @@ class EnergyScanThread(QThread):
         
         # On ajoute un sensor pour la valeur normalisee (specifique au EScan)
         nbSensors = nbSensors + 1
-        fmt_f = "%12.4e" + (nbSensors + 3)*"%12.4e" + "\n"
+        fmt_f = "%12.4e" + (nbSensors + 2)*"%12.4e" + "\n"
         _ln = 0
         
         channel_debut, channel_end = self.parent.fluodetdevice.roisStartsEnds
@@ -836,8 +1048,9 @@ class EnergyScanThread(QThread):
             
             
             # opening the fast shutter
-            self.parent.fastshutterdevice.Open()
-            #self.parent.md2device.OpenFastShutter() #write_attribute('FastShutterIsOpen', 1)
+            # self.parent.fastshutterdevice.Open()
+            self.wait(self.parent.md2device)
+            self.parent.md2device.OpenFastShutter() #write_attribute('FastShutterIsOpen', 1)
             #while self.parent.md2device.read_attribute('FastShutterIsOpen') != 1:
                 #time.nsleep(0.05)  
                 
@@ -850,29 +1063,23 @@ class EnergyScanThread(QThread):
             intensity = 0
             eventsInRun = 0
             eventsInRun_upToROI = 0
-	    eventsInRun_diffusion = 0
             for mS in range(self.miniSteps):
                 measurement += 1
                 self.parent.fluodetdevice.Start()
-                time.sleep(0.1)
                 #self.parent.counterdevice.Start()
                 #time.sleep(integrationTime/self.miniSteps)
                 #while self.parent.counterdevice.State().name != 'STANDBY':
                     #pass
                 #self.parent.fluodetdevice.Abort()
                 while self.parent.fluodetdevice.State().name != 'STANDBY':
-                    time.sleep(0.1)
-#                    pass
-#                roiCounts += self.parent.fluodetdevice.roi00_01
-                roiCounts += self.parent.fluodetdevice.roi02_01
+                    pass
+                roiCounts += self.parent.fluodetdevice.roi00_01
                 intensity += self.parent.xbpmdevice.intensity
-                eventsInRun += self.parent.fluodetdevice.eventsInRun02
+                eventsInRun += self.parent.fluodetdevice.eventsInRun00
                 #print 5*'\n'
                 #print 'realTime00', self.parent.fluodetdevice.realTime00
                 #print 5*'\n'
-#                eventsInRun_upToROI += sum(self.parent.fluodetdevice.channel00[ :channel_end + 1])
-                eventsInRun_upToROI += sum(self.parent.fluodetdevice.channel02[ :channel_end + 1])
-		eventsInRun_diffusion += sum(self.parent.fluodetdevice.channel02[ channel_end + 50 :])
+                eventsInRun_upToROI += sum(self.parent.fluodetdevice.channel00[ channel_end + 10:]) #elastic peak normalization
                 #collectRecord['DataPoints'][measurement] = {}
                 #collectRecord['DataPoints'][measurement]['MonoEnergy'] = pos_i
                 #collectRecord['DataPoints'][measurement]['ROICounts']  = self.parent.fluodetdevice.roi00_01
@@ -885,23 +1092,21 @@ class EnergyScanThread(QThread):
             print "Position: %12.4e   Measures: " % pos_readed
             
             # Lecture des differents sensors           
-            measures.append(roiCounts) #measures[2]#(self.parent.fluodetdevice.roi00_01) #eventsInRun00)
-            measures.append(intensity) #measures[3]#(self.parent.xbpmdevice.intensity)
-            measures.append(eventsInRun) #measures[4]#(self.parent.fluodetdevice.eventsInRun00)
-            measures.append(eventsInRun_upToROI)#measures[5]
-            measures.append(eventsInRun_diffusion)
+            measures.append(roiCounts) #(self.parent.fluodetdevice.roi00_01) #eventsInRun00)
+            measures.append(intensity) #(self.parent.xbpmdevice.intensity)
+            measures.append(eventsInRun) #(self.parent.fluodetdevice.eventsInRun00)
+            measures.append(eventsInRun_upToROI)
             # closing the fastshutter
-            self.parent.fastshutterdevice.Close() 
-            #self.parent.md2device.CloseFastShutter() #write_attribute('FastShutterIsOpen', 0)
+            #self.parent.fastshutterdevice.Close() 
+            self.wait(self.parent.md2device)
+            self.parent.md2device.CloseFastShutter() #write_attribute('FastShutterIsOpen', 0)
             #while self.parent.md2device.read_attribute('FastShutterIsOpen') != 0:
                 #time.sleep(0.05)
                
             # Valeur normalisee specifique au EScan 
             #(Oblige an mettre le sensor compteur en premier et le xbpm en deuxieme dans le liste des sensors)               
             try:
-                measures[1] = measures[2] / measures[6] #measures[3]  
-#                measures[1] = measures[2] / measures[3]   
-#                measures[1] = measures[2]   
+                measures[1] = measures[2] / measures[5] #measures[3]  
             except ZeroDivisionError, e:
                 print e
                 print 'Please verify that the safety shutter is open.'
@@ -920,17 +1125,17 @@ class EnergyScanThread(QThread):
                 f.flush() # flush the buffer every 10 lines
         
         # Exiting the Scan loop      
-        self.parent.fastshutterdevice.Close()
-#        while self.parent.fastshutterdevice.State != 'CLOSE':
-#            time.sleep(0.1)
-#        self.parent.md2device.CloseFastShutter() 
+        #self.parent.fastshutterdevice.Close()
+        #while self.parent.fastshutterdevice.State != "CLOSE":
+            #time.sleep(0.1)
+        self.parent.md2device.CloseFastShutter() 
         #while self.parent.md2device.read_attribute('FastShutterIsOpen') != 0:
             #time.sleep(0.05)
         
         self.parent.fluodetdevice.Abort()
         
-#        self.parent.md2device.write_attribute('FluoDetectorBack', 1)
-#        time.sleep(2)
+        self.parent.md2device.write_attribute('FluoDetectorBack', 1)
+        time.sleep(2)
         #self.parent.mono_mt_rx_device.On()
         if  not self.parent.scanning :
             self.result = -1
@@ -944,7 +1149,7 @@ class EnergyScanThread(QThread):
 
     def afterScan(self) :
         logging.getLogger("HWR").debug('EnergyScanThread:afterScan')
-#        self.parent.safetyshutterdevice.Close()
+        self.parent.safetyshutterdevice.Close()
         if self.parent.pk :
             self.parent.startMoveEnergy(self.parent.pk)
             

@@ -394,9 +394,9 @@ class ISPyBClient2(HardwareObject):
 
             group_id = self.store_data_collection_group(mx_collection)
             
-            if group_id:
-                data_collection.dataCollectionGroupId = group_id
-                
+            #if group_id:
+            #    data_collection.dataCollectionGroupId = group_id
+
             if beamline_setup:
                 lims_beamline_setup = ISPyBValueFactory.\
                     from_bl_config(beamline_setup)
@@ -421,7 +421,7 @@ class ISPyBClient2(HardwareObject):
             collection_id = self.__collection.service.\
                             storeOrUpdateDataCollection(data_collection)
 
-            return (group_id, collection_id, detector_id)
+            return (collection_id, detector_id)
         else:
             logging.getLogger("ispyb_client").\
                 exception("Error in store_data_collection: could not connect" + \
@@ -1149,14 +1149,15 @@ class ISPyBClient2(HardwareObject):
         """
         pos_id = -1
         mpos_dict = {'omega' : cpos.phi,
-                     'phi': 0,
-                     'phiX': 0, 
+                     'phi': cpos.kappa_phi,
+                     'kappa': cpos.kappa,
+                     'phiX': cpos.phix, 
                      'phiY': cpos.phiy,
                      'phiZ': cpos.phiz,
                      'sampX': cpos.sampx,
                      'sampY': cpos.sampy}
 
-        msg = 'Storing position in lims: %s' % mpos_dict
+        msg = 'Storing position in LIMS'
         logging.getLogger("user_level_log").info(msg)
         
         try:

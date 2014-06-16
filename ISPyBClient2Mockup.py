@@ -4,7 +4,7 @@ A client for ISPyB Webservices.
 
 import logging
 import os
-import datetime
+import time, datetime
 
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import HardwareObject
@@ -36,27 +36,33 @@ class ISPyBClient2Mockup(HardwareObject):
         :rtype: dict
         """
 
+        now = time.localtime()
+        start_sess = time.strftime("%Y-%m-%d" , now)
+        # make later to be 4 days from now
+        later=list(now[0:2])+ [now[2]+4] + list(now[3:])
+        end_sess = time.strftime("%Y-%m-%d" , later)
+
         return {'status': {'code': 'ok'},
                 'Person': {'personId': 1,
                            'laboratoryId': 1,
                            'login': None,
-                           'familyName':'operator on IDTESTeh1'},
+                           'familyName':'operator on TESTPX'},
                 'Proposal': {'code': 'idtest',
-                             'title': 'operator on IDTESTeh1',
+                             'title': 'operator on TESTPX',
                              'personId': 1,
                              'number': '000',
                              'proposalId': 1,
                              'type': 'MX'},
                 'Session': [{'scheduled': 0,
-                             'startDate': '2013-06-11 00:00:00',
-                             'endDate': '2013-06-12 07:59:59',
+                             'startDate': '%s 00:00:00' % start_sess,
+                             'endDate': '%s 07:59:59' % end_sess,
                              'beamlineName': 'ID:TEST',
-                             'timeStamp': datetime.datetime(2013, 6, 11, 9, 40, 36),
+                             'timeStamp': apply(datetime.datetime, now[0:6] ),
                              'comments': 'Session created by the BCM',
                              'sessionId': 34591,
                              'proposalId': 1, 'nbShifts': 3}],
                 'Laboratory': {'laboratoryId': 1,
-                               'name': 'TEST eh1'}}
+                               'name': 'TEST Proxima'}}
 
 
 
@@ -64,7 +70,7 @@ class ISPyBClient2Mockup(HardwareObject):
         return  {'personId': 1,
                  'laboratoryId': 1,
                  'login': None,
-                 'familyName':'operator on ID14eh1'}
+                 'familyName':'operator on PROXIMA BL'}
 
 
     def translate(self, code, what):
@@ -311,6 +317,14 @@ class ISPyBClient2Mockup(HardwareObject):
         """
         pass
     
+
+    def _store_data_collection_group(self, group_data):
+        pass
+
+
+    def store_centred_position(self, end_cpos):
+        pass
+
 
     # Bindings to methods called from older bricks.
     getProposal = get_proposal

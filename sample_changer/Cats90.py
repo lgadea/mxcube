@@ -5,7 +5,7 @@ Implements the abstract interface of the GenericSampleChanger for the CATS
 sample changer model.
 Derived from Alexandre Gobbo's implementation for the EMBL SC3 sample changer.
 """
-from GenericSampleChanger import *
+from .GenericSampleChanger import *
 import time
 
 __author__ = "Michael Hellmig"
@@ -51,17 +51,17 @@ class Basket(Container):
         self.getContainer()._triggerInfoChangedEvent()
 
 
-class CatsPX1(SampleChanger):
+class Cats90(SampleChanger):
     """
     Actual implementation of the CATS Sample Changer,
     BESSY BL14.1 installation with 3 lids and 90 samples
     """    
     __TYPE__ = "CATS"    
-    NO_OF_LIDS    = 3
+    NO_OF_LIDS = 3
     NO_OF_BASKETS = 9
 
     def __init__(self, *args, **kwargs):
-        super(CatsPX1, self).__init__(self.__TYPE__,False, *args, **kwargs)
+        super(Cats90, self).__init__(self.__TYPE__,False, *args, **kwargs)
             
     def init(self):      
         self._selected_sample = None
@@ -70,38 +70,18 @@ class CatsPX1(SampleChanger):
 
         # add support for CATS dewars with variable number of lids
         # assumption: each lid provides access to three baskets
-        self._propNoOfLids       = self.getProperty('no_of_lids')
-        self._propSamplesPerPuck = self.getProperty('samples_per_puck')
-        self._propHolderLength   = self.getProperty('holder_length')
-
-        self.currentBasketDataMatrix = "this-is-not-a-matrix"
-        self.currentSample = "this-is-not-a-sample"
-        self.currentBasket = "this-is-not-a-basket"
-
+        self._propNoOfLids = self.getProperty('no_of_lids')
         if self._propNoOfLids is not None:
             try:
-                CatsPX1.NO_OF_LIDS = int(self._propNoOfLids)
+                Cats90.NO_OF_LIDS = int(self._propNoOfLids)
             except ValueError:
                 pass
             else:
-                CatsPX1.NO_OF_BASKETS = 3 * CatsPX1.NO_OF_LIDS
-
-        if self._propSamplesPerPuck is not None:
-            try:
-                Basket.NO_OF_SAMPLES_PER_PUCK = int(self._propSamplesPerPuck)
-            except ValueError:
-                pass
- 
-        if self._propHolderLength is not None:
-            try:
-                Pin.STD_HOLDERLENGTH = int(self._propHolderLength)
-            except ValueError:
-                pass
- 
+                Cats90.NO_OF_BASKETS = 3 * Cats90.NO_OF_LIDS
         
         # initialize the sample changer components, moved here from __init__ after allowing
         # variable number of lids
-        for i in range(CatsPX1.NO_OF_BASKETS):
+        for i in range(Cats90.NO_OF_BASKETS):
             basket = Basket(self,i+1)
             self._addComponent(basket)
 
@@ -111,7 +91,7 @@ class CatsPX1(SampleChanger):
         for command_name in ("_cmdAbort", "_cmdLoad", "_cmdUnload", "_cmdChainedLoad"):
             setattr(self, command_name, self.getCommandObject(command_name))
 
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(Cats90.NO_OF_BASKETS):            
             channel_name = "_chnBasket%dState" % (basket_index + 1)
             setattr(self, channel_name, self.getChannelObject(channel_name))
 
@@ -136,8 +116,6 @@ class CatsPX1(SampleChanger):
         
     #########################           TASKS           #########################
 
-    def getLoadedSampleDataMatrix(self):
-        return "-not-a-matrix-"
     def _doUpdateInfo(self):       
         """
         Updates the sample changers status: mounted pucks, state, currently loaded sample
@@ -165,7 +143,7 @@ class CatsPX1(SampleChanger):
         basket = None
         sample = None
         try:
-          if basket_no is not None and basket_no>0 and basket_no <=CatsPX1.NO_OF_BASKETS:
+          if basket_no is not None and basket_no>0 and basket_no <=Cats90.NO_OF_BASKETS:
             basket = self.getComponentByAddress(Basket.getBasketAddress(basket_no))
             if sample_no is not None and sample_no>0 and sample_no <=Basket.NO_OF_SAMPLES_PER_PUCK:
                 sample = self.getComponentByAddress(Pin.getSampleAddress(basket_no, sample_no))            
@@ -302,7 +280,7 @@ class CatsPX1(SampleChanger):
         """
         self._waitDeviceReady(3.0)
         task_id = method(*args)
-        print "CatsPX1._executeServerTask", task_id
+        print "Cats90._executeServerTask", task_id
         ret=None
         if task_id is None: #Reset
             while self._isDeviceBusy():
@@ -406,7 +384,7 @@ class CatsPX1(SampleChanger):
         # print "_updateSelection: saved selection: ", self._selected_basket, self._selected_sample
         try:
           basket_no = self._selected_basket
-          if basket_no is not None and basket_no>0 and basket_no <=CatsPX1.NO_OF_BASKETS:
+          if basket_no is not None and basket_no>0 and basket_no <=Cats90.NO_OF_BASKETS:
             basket = self.getComponentByAddress(Basket.getBasketAddress(basket_no))
             sample_no = self._selected_sample
             if sample_no is not None and sample_no>0 and sample_no <=Basket.NO_OF_SAMPLES_PER_PUCK:
@@ -482,9 +460,9 @@ class CatsPX1(SampleChanger):
         :rtype: None
         """
         # create temporary list with default basket information
-        basket_list= [('', 4)] * CatsPX1.NO_OF_BASKETS
+        basket_list= [('', 4)] * Cats90.NO_OF_BASKETS
         # write the default basket information into permanent Basket objects 
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(Cats90.NO_OF_BASKETS):            
             basket=self.getComponents()[basket_index]
             datamatrix = None
             present = scanned = False
@@ -492,7 +470,7 @@ class CatsPX1(SampleChanger):
 
         # create temporary list with default sample information and indices
         sample_list=[]
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(Cats90.NO_OF_BASKETS):            
             for sample_index in range(Basket.NO_OF_SAMPLES_PER_PUCK):
                 sample_list.append(("", basket_index+1, sample_index+1, 1, Pin.STD_HOLDERLENGTH)) 
         # write the default sample information into permanent Pin objects 
@@ -514,7 +492,7 @@ class CatsPX1(SampleChanger):
         :returns: None
         :rtype: None
         """
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(Cats90.NO_OF_BASKETS):            
             # get presence information from the device server
             newBasketPresence = getattr(self, "_chnBasket%dState" % (basket_index + 1)).getValue()
             # get saved presence information from object's internal bookkeeping

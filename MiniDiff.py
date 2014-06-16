@@ -21,8 +21,7 @@ except ImportError:
 USER_CLICKED_EVENT = AsyncResult()
 
 
-def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, 
-                    beam_xc, beam_yc, phiy_direction=1):
+def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, beam_xc, beam_yc, phiy_direction=1):
   global USER_CLICKED_EVENT
   X, Y = [], []
   centredPosRel = {}
@@ -74,6 +73,7 @@ def move_to_centred_position(centred_pos):
     motor.move(pos)
 
   with gevent.Timeout(15):
+    time.sleep(1)  # this is because the motors are not yet moving  (with current MD2 software)
     while not all([m.getState() == m.READY for m in centred_pos.iterkeys()]):
       time.sleep(0.1)
 
@@ -112,16 +112,19 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
         light_level = zoom['positions'][0][zoom_level].getProperty('lightLevel')
       except IndexError:
         logging.getLogger("HWR").info("Could not get default light level")
+        light_level = 1
 
       if light_level:
         light_motor.move(light_level)
 
     while light.getWagoState()!="in":
       time.sleep(0.5)
+
   for i in range(4):
      logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
      centredImages.append((phi.getPosition(),str(myimage(drawing))))
      phi.syncMoveRelative(-90)
+     time.sleep(2)
 
   centredImages.reverse() # snapshot order must be according to positive rotation direction
 
@@ -154,6 +157,7 @@ class MiniDiff(Equipment):
         self.imgWidth = None
         self.imgHeight = None
         self.centredTime = 0
+        self.user_confirms_centring = True
 
         self.connect(self, 'equipmentReady', self.equipmentReady)
         self.connect(self, 'equipmentNotReady', self.equipmentNotReady)     
@@ -315,12 +319,6 @@ class MiniDiff(Equipment):
     def isReady(self):
       if self.isValid():
          motorsQuiet = True 
-         #logging.info("Motor sampleX is %s" % str(self.sampleYMotor) )
-         #logging.info("Motor sampleY is %s" % str(self.sampleYMotor) )
-         #logging.info("Motor zoom is %s" % str(self.zoomMotor) )
-         #logging.info("Motor phi is %s" % str(self.phiMotor) )
-         #logging.info("Motor phiz is %s" % str(self.phizMotor) )
-         #logging.info("Motor phiy is %s" % str(self.phiyMotor) )   
          for m in (self.sampleXMotor, self.sampleYMotor, self.zoomMotor, self.phiMotor, self.phizMotor, self.phiyMotor):
             if m.motorIsMoving():
                  motorsQuiet = False
@@ -405,6 +403,7 @@ class MiniDiff(Equipment):
 
 
     def invalidateCentring(self):
+        logging.info("Invalidating centring manualCentringProcedure is %s", str(self.currentCentringProcedure) )
         if self.currentCentringProcedure is None and self.centringStatus["valid"]:
             self.centringStatus={"valid":False}
             self.emitProgressMessage("")
@@ -418,7 +417,6 @@ class MiniDiff(Equipment):
     def phiyMotorMoved(self, pos):
         if time.time() - self.centredTime > 1.0:
            self.invalidateCentring()
-
 
     def sampleXMotorMoved(self, pos):
         if time.time() - self.centredTime > 1.0:
@@ -439,6 +437,10 @@ class MiniDiff(Equipment):
 
     def getBeamPosY(self):
         return self.imgHeight / 2
+
+    def getBeamInfo(self, update_beam_callback):
+        get_beam_info = self.getCommandObject("getBeamInfo")
+        get_beam_info(callback=update_beam_callback, error_callback=None, wait=True)
 
     def moveToBeam(self, x, y):
         try:
@@ -557,12 +559,14 @@ class MiniDiff(Equipment):
           try:
             move_to_centred_position(motor_pos, wait = True)
           except:
+            import traceback
             logging.exception("Could not move to centred position")
+            logging.debug( traceback.format_exc() )
             self.emitCentringFailed()
           else:
             self.phiMotor.syncMoveRelative(-180)
-          #logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
+          self.emitProgressMessage("    - moved to centred position finished")
           self.emitCentringSuccessful()
           self.emitProgressMessage("")
 
@@ -577,7 +581,7 @@ class MiniDiff(Equipment):
 
         return move_to_centred_position(motor_pos, wait=wait)
       except:
-        logging.exception("Could not move to centred position")
+        logging.exception("Could not move to centred position (2)")
 
 
     def autoCentringDone(self, auto_centring_procedure):
@@ -590,7 +594,11 @@ class MiniDiff(Equipment):
           logging.error("Could not complete automatic centring")
           self.emitCentringFailed()
         else:
-          self.emitCentringSuccessful()
+          if self.user_confirms_centring:
+            self.emitCentringSuccessful()
+          else:
+            self.emitCentringSuccessful()
+            self.acceptCentring()
               
 
     def do_auto_centring(self, phi, phiy, phiz, sampx, sampy, zoom, camera, phiy_direction):
@@ -785,10 +793,12 @@ class MiniDiff(Equipment):
             for motor_role in ('phiy', 'phiz', 'sampx', 'sampy', 'zoom', 'phi', 'focus', 'kappa', 'kappa_phi'):
                 mot_obj = self.getDeviceByRole(motor_role)
 
-                try:
-                    motors[motor_role] = motor_pos[mot_obj] 
-                except KeyError:
-                    motors[motor_role] = mot_obj.getPosition()
+                if mot_obj is not None:
+                  try:
+                      motors[motor_role] = motor_pos[mot_obj] 
+                  except KeyError:
+                      motors[motor_role] = mot_obj.getPosition()
+
             self.centringStatus["motors"]=motors
             self.centringStatus["method"]=self.currentCentringMethod
             self.centringStatus["valid"]=True
@@ -821,6 +831,29 @@ class MiniDiff(Equipment):
                "kappa_phi": self.kappaPhiMotor.getPosition(),
                "zoom": self.zoomMotor.getPosition()}
     
+
+    def moveMotors(self, roles_positions_dict):
+        motor = { "phi": self.phiMotor,
+                  "focus": self.focusMotor,
+                  "phiy": self.phiyMotor,
+                  "phiz": self.phizMotor,
+                  "sampx": self.sampleXMotor,
+                  "sampy": self.sampleYMotor,
+                  "kappa": self.kappaMotor,
+                  "kappa_phi": self.kappaPhiMotor,
+                  "zoom": self.zoomMotor }
+   
+        for role, pos in roles_positions_dict.iteritems():
+           motor[role].move(pos)
+ 
+        # TODO: remove this sleep, the motors states should
+        # be MOVING since the beginning (or READY if move is
+        # already finished) 
+        time.sleep(1)
+ 
+        while not all([m.getState() == m.READY for m in motor.itervalues()]):
+           time.sleep(0.1)
+
 
     def takeSnapshots(self, wait=False):
         self.camera.forceUpdate = True
