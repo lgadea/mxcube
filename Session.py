@@ -53,8 +53,8 @@ class Session(HardwareObject):
             self.in_house_users.append((prop.getProperty('code'),
                 str(prop.getProperty('number'))))
 
-        queue_model_objects.PathTemplate.set_archive_path(self['file_info'].getProperty('archive_base_directory'),
-                                                          self['file_info'].getProperty('archive_folder'))
+        #queue_model_objects.PathTemplate.set_archive_path(self['file_info'].getProperty('archive_base_directory'),
+                                                          #self['file_info'].getProperty('archive_folder'))
 
 
     def get_base_data_directory(self):
