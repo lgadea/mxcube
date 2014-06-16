@@ -89,7 +89,7 @@ class TangoShutter(BaseHardwareObjects.Device):
         print self
         
     def init(self):
-        self.shutterStateValue = 13
+        self.shutterStateValue = 'UNKNOWN'
 
         try:
             chanStatus = self.getChannelObject('State')
@@ -102,15 +102,15 @@ class TangoShutter(BaseHardwareObjects.Device):
         #
         # emit signal
         #
-        self.shutterStateValue = value # str(value)
-        #print self.shutterStateValue
-        #print 'self.shutterStateValue', self.shutterStateValue
-        # print "emit : ",TangoShutter.shutterState[self.shutterStateValue]
-        self.emit('shutterStateChanged', (self.getShutterState(),))
+        self.shutterStateValue = str(value)
+        retval =  self.getShutterState()
+        self.emit('shutterStateChanged', (retval,))
+
+        #self.emit('shutterStateChanged', (self.getShutterState(),))
 
 
     def getShutterState(self):
-        #print "getShutterState return :", TangoShutter.shutterState[self.shutterStateValue]
+        print "getShutterState return :", TangoShutter.shutterState[str(self.shutterStateValue)].lower()
         #print "                      self.shutterStateValue=", self.shutterStateValue
         #print 'getShutterState TangoShutter.shutterState[self.shutterStateValue].lower()', TangoShutter.shutterState[str(self.shutterStateValue)].lower()
         return TangoShutter.shutterState[str(self.shutterStateValue)].lower()

@@ -9,9 +9,7 @@ import pylab
 import numpy
 import os
 import pickle
-
-
-#sys.exit()
+# from xabs_lib import *
 
 #md2             = PyTango.DeviceProxy('i11-ma-cx1/ex/md2')
 #ketek           = PyTango.DeviceProxy('i11-ma-cx1/dt/dtc-mca_xmap.1')
@@ -165,4 +163,3 @@ if __name__ == '__main__':
     #doCollect.setIntegrationTime()
     doCollect.measureSpectrum()
     doCollect.plotSpectrum()
-    

@@ -127,6 +127,8 @@ class LimaAdscDetector:
         self.imageNumber = frame_number
 
         logging.info('LIMA Detector - set filenames - imagePath is %s / filename is %s' % (self.imagePath, self.fileName))
+        logging.info('   - thumbnail full path %s' % jpeg_thumbnail_full_path )
+        logging.info('   - snapshot full path %s' % jpeg_full_path )
 
         if not self.imagePath.endswith('/'):
             self.imagePath += '/'
@@ -352,18 +354,19 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
           
         
     def init(self):
-        self.setControlObjects(diffractometer = self.getObjectByRole("diffractometer"),
-                               sample_changer = self.getObjectByRole("sample_changer"),
-                               lims = self.getObjectByRole("dbserver"),
-                               safety_shutter = self.getObjectByRole("safety_shutter"),
-                               machine_current = self.getObjectByRole("machine_current"),
-                               cryo_stream = self.getObjectByRole("cryo_stream"),
-                               energy = self.getObjectByRole("energy"),
-                               resolution = self.getObjectByRole("resolution"),
+        self.setControlObjects(diffractometer    = self.getObjectByRole("diffractometer"),
+                               sample_changer    = self.getObjectByRole("sample_changer"),
+                               lims              = self.getObjectByRole("dbserver"),
+                               safety_shutter    = self.getObjectByRole("safety_shutter"),
+                               fast_shutter      = self.getObjectByRole("fast_shutter"),
+                               machine_current   = self.getObjectByRole("machine_current"),
+                               cryo_stream       = self.getObjectByRole("cryo_stream"),
+                               energy            = self.getObjectByRole("energy"),
+                               resolution        = self.getObjectByRole("resolution"),
                                detector_distance = self.getObjectByRole("detector_distance"),
-                               transmission = self.getObjectByRole("transmission"),
-                               undulators = self.getObjectByRole("undulators"),
-                               flux = self.getObjectByRole("flux"))
+                               transmission      = self.getObjectByRole("transmission"),
+                               undulators        = self.getObjectByRole("undulators"),
+                               flux              = self.getObjectByRole("flux"))
 
         mxlocalHO = self.getObjectByRole("beamline_configuration")
         bcm_pars = mxlocalHO["BCM_PARS"]
@@ -410,8 +413,7 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
 
     @task
     def take_crystal_snapshots(self):
-        logging.info("<SOLEIL MultiCollect> VERIFY - take crystal snapshots")
-        #self.bl_control.diffractometer.takeSnapshots(wait=True)
+        self.bl_control.diffractometer.takeSnapshots(wait=True)
 
     #TODO: remove this hook!!!
     @task
@@ -420,29 +422,26 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
         return
 
     @task
+    def data_collection_cleanup(self):
+        self.close_fast_shutter()
+
+    @task
     def set_transmission(self, transmission_percent):
-        logging.info("<SOLEIL MultiCollect> TODO - set transmission")
-        #self.bl_control.transmission.setTransmission(transmission_percent)
+        self.bl_control.transmission.setTransmission(transmission_percent)
 
 
     def set_wavelength(self, wavelength):
         logging.info("<SOLEIL MultiCollect> TODO - set wavelength")
-        #return self._tunable_bl.set_wavelength(wavelength)
+        return self._tunable_bl.set_wavelength(wavelength)
 
 
     def set_energy(self, energy):
-        logging.info("<SOLEIL MultiCollect> TODO - set energy")
-        # TOFILL self.setEnergy(self.energy)
-
-        #return self._tunable_bl.set_energy(energy)
+        return self._tunable_bl.set_energy(energy)
 
 
     @task
     def set_resolution(self, new_resolution):
-        logging.info("<SOLEIL MultiCollect> TODO - set resolution")
-        # TOFILL self.setResolution(self.resolution)
-        return
-        
+        return self.bl_control.resolution.move(new_resolution)
 
     @task
     def move_detector(self, detector_distance):
@@ -452,14 +451,25 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
 
     @task
     def close_fast_shutter(self):
-        logging.info("<SOLEIL MultiCollect> TODO - close fast shutter" )
-        #self.execute_command("close_fast_shutter")
+        logging.info("<SOLEIL MultiCollect> close fast shutter ")
+        self.bl_control.fast_shutter.closeShutter()
+        t0 = time.time()
+        while self.bl_control.fast_shutter.getShutterState() != 'closed':
+            time.sleep(0.1)
+            if (time.time() - t0) > 4:
+                logging.getLogger("HWR").error("Timeout on closing fast shutter")
+                break
 
     @task
     def open_fast_shutter(self):
-        logging.info("<SOLEIL MultiCollect> TODO - open fast shutter" )
-        # TOFILL
-        #self.execute_command("open_fast_shutter")
+        logging.info("<SOLEIL MultiCollect> open fast shutter ")
+        self.bl_control.fast_shutter.openShutter()
+        t0 = time.time()
+        while self.bl_control.fast_shutter.getShutterState() == 'closed':
+            time.sleep(0.1)
+            if (time.time() - t0) > 4:
+                logging.getLogger("HWR").error("Timeout on opening fast shutter")
+                break
 
         
     @task
@@ -486,8 +496,6 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def open_safety_shutter(self):
         logging.info("<SOLEIL MultiCollect> VERIFY - open safety shutter" )
-        # TOFILL self.openSafetyShutter()
-        return
         self.bl_control.safety_shutter.openShutter()
         while self.bl_control.safety_shutter.getShutterState() == 'closed':
           time.sleep(0.1)
@@ -496,8 +504,6 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def close_safety_shutter(self):
         logging.info("<SOLEIL MultiCollect> VERIFY - close safety shutter" )
-        # TOFILL self.closeSafetyShutter()
-        return
         self.bl_control.safety_shutter.closeShutter()
         while self.bl_control.safety_shutter.getShutterState() == 'opened':
           time.sleep(0.1)
@@ -595,7 +601,6 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
 
     def get_wavelength(self):
         logging.info("<SOLEIL MultiCollect> TODO - get wavelength " )
-        return
         return self._tunable_bl.get_wavelength()
 
     def get_detector_distance(self):
@@ -603,10 +608,7 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
         return
        
     def get_resolution(self):
-        logging.info("<SOLEIL MultiCollect> TODO - get resolution " )
-        return
         return self.bl_control.resolution.getPosition()
-
 
     def get_transmission(self):
         logging.info("<SOLEIL MultiCollect> TODO - get transmission " )
@@ -637,7 +639,7 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
 
     def get_beam_size(self):
         logging.info("<SOLEIL MultiCollect> TODO - get beam size " )
-        return
+        return (None,None)
         return (self.execute_command("get_beam_size_x"), self.execute_command("get_beam_size_y"))
 
 
@@ -758,7 +760,8 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
           return archive_dir
 
     def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
-        pass
+        return "/tnp", "/tmp"
+        
     def write_input_files(self, collection_id):
         pass
 

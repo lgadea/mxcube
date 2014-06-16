@@ -22,7 +22,7 @@ class BLEnergy (Device) :
         self.moving = None
         self.deviceOk = True
         self.prev_state = None
-        self.doBacklashCompensation = True
+        self.doBacklashCompensation = False
         
         # Connect to device BLEnergy defined "tangoname" in the xml file 
         try :
@@ -86,23 +86,30 @@ class BLEnergy (Device) :
          
     # called by brick : not useful      
     def isSpecConnected(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.isSpecConnected", self.name())
+        logging.getLogger("HWR").debug("%s: BLEnergy.isSpecConnected", self.name())
+        return True
+    
+    def isConnected(self):
+        logging.getLogger("HWR").debug("%s: BLEnergy.isConnected", self.name())
         return True
 
-
-    def isConnected(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.isConnected", self.name())
+    def sConnected(self):
+        logging.getLogger("HWR").debug("%s: BLEnergy.sConnected", self.name())
         self.deviceOk = True
         self.emit('connected', ())
       
-    def isDisconnected(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.isDisconnected", self.name())
+    def sDisconnected(self):
+        logging.getLogger("HWR").debug("%s: BLEnergy.sDisconnected", self.name())
         self.deviceOk = False
         self.emit('disconnected', ())
-
+    
+    def isDisconnected(self):
+        logging.getLogger("HWR").debug("%s: BLEnergy.isDisconnected", self.name())
+        return True
+        
     # Definit si la beamline est a energie fixe ou variable      
     def canMoveEnergy(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.canMoveEnergy", self.name())
+        logging.getLogger("HWR").debug("%s: BLEnergy.canMoveEnergy", self.name())
         return  True
         
     def getCurrentEnergy(self):
@@ -143,9 +150,9 @@ class BLEnergy (Device) :
             enconfig = self.BLEnergydevice.get_attribute_config("energy")
             max = float(enconfig.max_value)
             min = float(enconfig.min_value)
-            lims = [min,max]
-            logging.getLogger("HWR").info("HOS : energy Limits: %.4f %.4f" % \
-                                          tuple(lims))       
+            lims = (min, max)
+
+            logging.getLogger("HWR").info("HOS : energy Limits: %.4f %.4f" % lims)       
             return lims
         else :
             return None
@@ -168,7 +175,7 @@ class BLEnergy (Device) :
         else :
             return None    
             
-    def startMoveEnergy(self,value):   
+    def startMoveEnergy(self, value, wait=False):   
         logging.getLogger("HWR").debug("%s: BLEnergy.startMoveEnergy: %.3f", self.name(), value)
     
         # MODIFICATION DE CETTE FONCTION POUR COMPENSER LE PROBLEME D'HYSTERESIS DE L"ONDULEUR
@@ -214,7 +221,7 @@ class BLEnergy (Device) :
             logging.getLogger().error("\tCheck devices")
     
 
-    def startMoveWavelength(self,value):
+    def startMoveWavelength(self, value, wait=False):
         logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %.3f", self.name(), value)
         self.monodevice.simLambda = value
         self.startMoveEnergy(self.monodevice.simEnergy)
@@ -250,7 +257,8 @@ class BLEnergy (Device) :
     def moveEnergyCmdStarted(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdStarted", self.name())
         self.moving = True
-        self.emit('moveEnergyStarted',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
+        #self.emit('moveEnergyStarted',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
+        self.emit('moveEnergyStarted', ())
         
     def moveEnergyCmdFailed(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFailed", self.name())
@@ -265,8 +273,9 @@ class BLEnergy (Device) :
         logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFinished", self.name())
         self.moving = False
         print 'moveEnergyFinished'
-        self.emit('moveEnergyFinished',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
-
+        #self.emit('moveEnergyFinished',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
+        self.emit('moveEnergyFinished',())
+        
     def getPreviousResolution(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.getPreviousResolution", self.name())
         return (None, None)

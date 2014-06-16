@@ -86,6 +86,7 @@ class CcdDetector:
       
     @task
     def reset_detector(self):   
+        self.getCommandObject("reset_detector").abort()
         self.execute_command("reset_detector")
 
 
@@ -134,7 +135,7 @@ class PixelDetector:
     @task
     def start_acquisition(self, exptime, npass, first_frame):
       if not first_frame and self.shutterless:
-        time.sleep(exptime) 
+        pass 
       else:
         self.execute_command("start_acquisition")
 
@@ -150,6 +151,8 @@ class PixelDetector:
               # make oscillation an asynchronous task => do not wait here
               self.oscillation_task = self.execute_command("do_oscillation", start, end, exptime, npass, wait=False)
           else:
+              time.sleep(0.89*exptime)
+
               try:
                  self.oscillation_task.get(block=False)
               except gevent.Timeout:
@@ -174,6 +177,7 @@ class PixelDetector:
     def reset_detector(self):
       if self.shutterless:
           self.oscillation_task.kill()
+      self.getCommandObject("reset_detector").abort()    
       self.execute_command("reset_detector")
 
 
@@ -184,7 +188,6 @@ class ESRFMultiCollect(AbstractMultiCollect, HardwareObject):
         self._detector = detector
         self._tunable_bl = tunable_bl
         self._centring_status = None
-
 
     def execute_command(self, command_name, *args, **kwargs): 
       wait = kwargs.get("wait", True)
@@ -239,7 +242,6 @@ class ESRFMultiCollect(AbstractMultiCollect, HardwareObject):
                                       beam_divergence_vertical = bcm_pars.getProperty('beam_divergence_vertical'),
                                       beam_divergence_horizontal = bcm_pars.getProperty('beam_divergence_horizontal'),     
                                       polarisation = bcm_pars.getProperty('polarisation'),
-                                      auto_processing_server = self.getProperty("auto_processing_server"),
                                       input_files_server = self.getProperty("input_files_server"))
   
 	self.getChannelObject("spec_messages").connectSignal("update", self.log_message_from_spec)
@@ -260,7 +262,6 @@ class ESRFMultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def take_crystal_snapshots(self):
         self.bl_control.diffractometer.takeSnapshots(wait=True)
-
 
     #TODO: remove this hook!!!
     @task
@@ -289,6 +290,11 @@ class ESRFMultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def move_detector(self, detector_distance):
         return
+
+
+    @task
+    def data_collection_cleanup(self):
+        self.execute_command("close_fast_shutter")
 
 
     @task

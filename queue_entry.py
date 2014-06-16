@@ -21,12 +21,13 @@ implementations of tasks.
 """
 
 import gevent
+import traceback
 import logging
 import time
 import queue_model_objects_v1 as queue_model_objects
-import pprint
 import os
 import ShapeHistory as shape_history
+import autoprocessing
 
 #import edna_test_data
 #from XSDataMXCuBEv1_3 import XSDataInputMXCuBE
@@ -38,15 +39,6 @@ from queue_model_enumerables_v1 import EXPERIMENT_TYPE
 from BlissFramework.Utils import widget_colors
 from HardwareRepository.HardwareRepository import dispatcher
 
-__author__ = "Marcus Oskarsson"
-__copyright__ = "Copyright 2012, ESRF"
-__credits__ = ["My great coleagues", "The MxCuBE colaboration"]
-
-__version__ = "0.1"
-__maintainer__ = "Marcus Oskarsson"
-__email__ = "marcus.oscarsson@esrf.fr"
-__status__ = "Beta"
-
 
 status_list = ['SUCCESS','WARNING', 'FAILED']
 QueueEntryStatusType = namedtuple('QueueEntryStatusType', status_list)
@@ -56,19 +48,23 @@ QUEUE_ENTRY_STATUS = QueueEntryStatusType(0,1,2,)
 class QueueExecutionException(Exception):
     def __init__(self, message, origin):
         Exception.__init__(self, message, origin)
+        self.message = message
         self.origin = origin
-
+        self.stack_trace = traceback.format_exc()
 
 class QueueAbortedException(QueueExecutionException):
     def __init__(self, message, origin):
         Exception.__init__(self, message, origin)
         self.origin = origin
-
+        self.message = message
+        self.stack_trace = traceback.format_exc()
 
 class QueueSkippEntryException(QueueExecutionException):
     def __init__(self, message, origin):
         Exception.__init__(self, message, origin)
         self.origin = origin
+        self.message = message
+        self.stack_trace = traceback.format_exc()
 
 
 class QueueEntryContainer(object):
@@ -316,16 +312,23 @@ class BaseQueueEntry(QueueEntryContainer):
             info('Calling post_execute on: ' + str(self))
         view = self.get_view()
 
-        if self.status == QUEUE_ENTRY_STATUS.SUCCESS:
-            view.setBackgroundColor(widget_colors.LIGHT_GREEN)
-        elif self.status == QUEUE_ENTRY_STATUS.WARNING:
-            view.setBackgroundColor(widget_colors.LIGHT_YELLOW)
-        elif self.status == QUEUE_ENTRY_STATUS.FAILED:
-            view.setBackgroundColor(widget_colors.LIGHT_RED)
-            
         view.setHighlighted(True)
         view.setOn(False)
         self.get_data_model().set_executed(True)
+        self._set_background_color()
+
+    def _set_background_color(self):
+        view = self.get_view()
+
+        if self.get_data_model().is_executed():
+            if self.status == QUEUE_ENTRY_STATUS.SUCCESS:
+                view.setBackgroundColor(widget_colors.LIGHT_GREEN)
+            elif self.status == QUEUE_ENTRY_STATUS.WARNING:
+                view.setBackgroundColor(widget_colors.LIGHT_YELLOW)
+            elif self.status == QUEUE_ENTRY_STATUS.FAILED:
+                view.setBackgroundColor(widget_colors.LIGHT_RED)
+        else:
+            view.setBackgroundColor(widget_colors.WHITE)
 
     def stop(self):
         """
@@ -372,22 +375,27 @@ class TaskGroupQueueEntry(BaseQueueEntry):
     def __init__(self, view=None, data_model=None):
         BaseQueueEntry.__init__(self, view, data_model)
         self.lims_client_hwobj = None
-        self._lims_group_id = 0
         self.session_hwobj = None
 
     def execute(self):
         BaseQueueEntry.execute(self)
-        group_data = {'sessionId': self.session_hwobj.session_id}
+        gid = self.get_data_model().lims_group_id
 
-        if self.lims_client_hwobj:
-          try:
-            gid = self.lims_client_hwobj.\
-                store_data_collection_group(group_data)
-            self.get_data_model().lims_group_id = gid
-          except Exception as ex:
-            msg = 'Could not create the data collection group' + \
-                       ' in lims. Reason: ' + ex.message, self
-            raise QueueExecutionException(msg)
+        if not gid:
+            # Creating a collection group with the current session id
+            # and a dummy exepriment type OSC. The experiment type
+            # will be updated when the collections are stored.
+            group_data = {'sessionId': self.session_hwobj.session_id,
+                          'experimentType': 'OSC'}
+
+            try:
+                gid = self.lims_client_hwobj.\
+                  _store_data_collection_group(group_data)
+                self.get_data_model().lims_group_id = gid
+            except Exception as ex:
+                msg = 'Could not create the data collection group' + \
+                      ' in LIMS. Reason: ' + str(ex)
+                raise QueueExecutionException(msg, self)
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
@@ -399,6 +407,10 @@ class TaskGroupQueueEntry(BaseQueueEntry):
 
 
 class SampleQueueEntry(BaseQueueEntry):
+    """
+    Defines the behaviour of sample queue entries. Mounting, launching centring
+    and so on.
+    """
     def __init__(self, view=None, data_model=None):
         BaseQueueEntry.__init__(self, view, data_model)
         self.sample_changer_hwobj = None
@@ -408,12 +420,16 @@ class SampleQueueEntry(BaseQueueEntry):
     def execute(self):
         BaseQueueEntry.execute(self)
         log = logging.getLogger('queue_exec')
+        sc_used = not self._data_model.free_pin_mode
 
-        if not self._data_model.free_pin_mode:
+        # Only execute samples with collections and when sample changer is used
+        if len(self.get_data_model().get_children()) != 0 and sc_used:
             if self.sample_changer_hwobj is not None:
                 log.info("Loading sample " + self._data_model.loc_str)
+
                 sample_mounted = self.sample_changer_hwobj.\
-                                 is_mounted_sample(self._data_model)
+                                 is_mounted_sample(self._data_model.location)
+
                 if not sample_mounted:
                     self.sample_centring_result = gevent.event.AsyncResult()
                     try:
@@ -449,10 +465,47 @@ class SampleQueueEntry(BaseQueueEntry):
 
     def post_execute(self):
         BaseQueueEntry.post_execute(self)
+        params = []
+
+        # Start grouped processing, get information from each collection
+        # and call autoproc with grouped processing option
+        for child in self.get_data_model().get_children():
+            for grand_child in child.get_children():
+                if isinstance(grand_child, queue_model_objects.DataCollection):
+                    xds_dir = grand_child.acquisitions[0].path_template.xds_dir
+                    residues = grand_child.processing_parameters.num_residues
+                    anomalous = grand_child.processing_parameters.anomalous
+                    space_group = grand_child.processing_parameters.space_group
+                    cell = grand_child.processing_parameters.get_cell_str()
+                    inverse_beam = grand_child.acquisitions[0].acquisition_parameters.inverse_beam
+
+                    params.append({'collect_id': grand_child.id, 
+                                   'xds_dir': xds_dir,
+                                   'residues': residues,
+                                   'anomalous' : anomalous,
+                                   'spacegroup': space_group,
+                                   'cell': cell,
+                                   'inverse_beam': inverse_beam})
+
+        try:
+            programs = self.beamline_setup.collect_hwobj["auto_processing"]
+        except IndexError:
+            # skip autoprocessing of the data
+            pass
+        else:
+            autoprocessing.start(programs, "end_multicollect", params)
+
+        self._set_background_color()
         self._view.setText(1, "")
+
+    def _set_background_color(self):
+        BaseQueueEntry._set_background_color(self)
 
 
 class SampleCentringQueueEntry(BaseQueueEntry):
+    """
+    Entry for centring a sample
+    """
     def __init__(self, view=None, data_model=None):
         BaseQueueEntry.__init__(self, view, data_model)
         self.sample_changer_hwobj = None
@@ -464,7 +517,7 @@ class SampleCentringQueueEntry(BaseQueueEntry):
 
         self.get_view().setText(1, 'Waiting for input')
         log = logging.getLogger("user_level_log")
-        log.warning("Please select a centred position.")
+        log.warning("Please select a centred position, and press continue.")
 
         self.get_queue_controller().pause(True)
         pos = None
@@ -474,14 +527,15 @@ class SampleCentringQueueEntry(BaseQueueEntry):
         elif len(self.shape_history.shapes):
             pos = self.shape_history.shapes.values()[0]
         else:
-            log.warning("No centred position selected, " +\
-                        " using current position.")
+            msg = "No centred position selected, using current position."
+            log.info(msg)
 
             # Create a centred postions of the current postion
             pos_dict = self.diffractometer_hwobj.getPositions()
             cpos = queue_model_objects.CentredPosition(pos_dict)
             pos = shape_history.Point(None, cpos, None)
 
+        # Get tasks associated with this centring
         tasks = self.get_data_model().get_tasks()
 
         for task in tasks:
@@ -509,6 +563,9 @@ class SampleCentringQueueEntry(BaseQueueEntry):
 
 
 class DataCollectionQueueEntry(BaseQueueEntry):
+    """
+    Defines the behaviour of a data collection.
+    """
     def __init__(self, view=None, data_model=None, view_set_queue_entry=True):
         BaseQueueEntry.__init__(self, view, data_model, view_set_queue_entry)
 
@@ -528,7 +585,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
             self.collect_dc(data_collection, self.get_view())
 
         if self.shape_history:
-            self.shape_history.get_drawing_event_handler().de_select_all()
+            self.shape_history.de_select_all()
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
@@ -581,6 +638,8 @@ class DataCollectionQueueEntry(BaseQueueEntry):
         qc.disconnect(self.collect_hwobj, 'collectNumberOfFrames',
                      self.collect_number_of_frames)
 
+        self.get_view().set_checkable(False)
+
     def collect_dc(self, dc, list_item):
 
         log = logging.getLogger("user_level_log")
@@ -591,10 +650,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
      
             acq_1 = dc.acquisitions[0]
             cpos = acq_1.acquisition_parameters.centred_position
-            
-            #acq_1.acquisition_parameters.take_snapshots = True
-            param_list = queue_model_objects.\
-                to_collect_dict(dc, self.session)
+            sample = self.get_data_model().get_parent().get_parent()
 
             try:
                 if dc.experiment_type is EXPERIMENT_TYPE.HELICAL:
@@ -615,13 +671,9 @@ class DataCollectionQueueEntry(BaseQueueEntry):
 
                     self.collect_hwobj.set_helical(True, helical_oscil_pos)
 
-                    msg = "Helical data collection with start" +\
-                          "position: " + str(pprint.pformat(start_cpos)) + \
-                          " and end position: " + str(pprint.pformat(end_cpos))
+                    msg = "Helical data collection, moving to start position"
                     log.info(msg)
-                    #log.info("Moving to start position: " + \
-                    #         str(pprint.pformat(start_cpos)))
-
+                    log.info("Moving sample to given position ...")
                     list_item.setText(1, "Moving sample")
                 else:
                     #self.collect_hwobj.getChannelObject("helical").setValue(0)
@@ -630,7 +682,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
                 empty_cpos = queue_model_objects.CentredPosition()
 
                 if cpos != empty_cpos:
-                    log.info("Moving to: " + str(cpos))
+                    log.info("Moving sample to given position ...")
                     list_item.setText(1, "Moving sample")
                     self.shape_history.select_shape_with_cpos(cpos)
                     self.centring_task = self.diffractometer_hwobj.\
@@ -644,24 +696,22 @@ class DataCollectionQueueEntry(BaseQueueEntry):
                     acq_1.acquisition_parameters.centred_position.snapshot_image = snapshot
 
                 dc.lims_start_pos_id = self.lims_client_hwobj.store_centred_position(cpos)
-                    
-                #log.info("Calling collect hw-object with: " + str(dc.as_dict()))
-
-                #log.info("Collecting: " + str(dc.as_dict()))
+                param_list = queue_model_objects.to_collect_dict(dc, self.session, sample)
                 self.collect_task = self.collect_hwobj.\
-                                    collect(COLLECTION_ORIGIN_STR.MXCUBE,
-                                            param_list)                
+                    collect(COLLECTION_ORIGIN_STR.MXCUBE, param_list)                
                 self.collect_task.get()
-                dc.id = param_list[0]['collection_id']
-                
+
+                if 'collection_id' in param_list[0]:
+                    dc.id = param_list[0]['collection_id']
+
+                dc.acquisitions[0].path_template.xds_dir = param_list[0]['xds_dir']
+
             except gevent.GreenletExit:
-                log.exception("Collection stopped by user.")
-                log.warning("Collection stopped by user.")
+                #log.warning("Collection stopped by user.")
                 list_item.setText(1, 'Stopped')
-                raise QueueAbortedException('Queue stopped', self)
+                raise QueueAbortedException('queue stopped by user', self)
             except Exception as ex:
-                import traceback
-                logging.info("data collection exec. exception occurred. %s " % traceback.format_exc() )
+                print traceback.print_exc()
                 raise QueueExecutionException(ex.message, self)
         else:
             log.error("Could not call the data collection routine," +\
@@ -697,6 +747,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
         # this is to work around the remote access problem
         dispatcher.send("collect_finished")
         self.get_view().setText(1, "Failed")
+        self.status = QUEUE_ENTRY_STATUS.FAILED
         logging.getLogger("user_level_log").error(message.replace('\n', ' '))
         raise QueueExecutionException(message.replace('\n', ' '), self)
 
@@ -715,12 +766,10 @@ class DataCollectionQueueEntry(BaseQueueEntry):
 
         try:
             self.get_view().setText(1, 'Stopping ...')
-            if self.collect_task:
-                self.collect_task.kill(block=False)
+            self.collect_hwobj.stopCollect('mxCuBE')
 
             if self.centring_task:
                 self.centring_task.kill(block=False)
-
         except gevent.GreenletExit:
             raise
 
@@ -733,6 +782,10 @@ class DataCollectionQueueEntry(BaseQueueEntry):
 
 
 class CharacterisationGroupQueueEntry(BaseQueueEntry):
+    """
+    Used to group (couple) a CollectionQueueEntry and a
+    CharacterisationQueueEntry, creating a virtual entry for characterisation.
+    """
     def __init__(self, view=None, data_model=None,
                  view_set_queue_entry=True):
         BaseQueueEntry.__init__(self, view, data_model, view_set_queue_entry)
@@ -746,11 +799,13 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
         char = self.get_data_model()
         reference_image_collection = char.reference_image_collection
 
+        # Trick to make sure that the reference collection has a sample.
+        reference_image_collection._parent = char.get_parent()
+
         gid = self.get_data_model().get_parent().lims_group_id
         reference_image_collection.lims_group_id = gid
 
-        # Enqueue the reference collection and the characterisation
-        # routine.
+        # Enqueue the reference collection and the characterisation routine.
         dc_qe = DataCollectionQueueEntry(self.get_view(),
                                          reference_image_collection,
                                          view_set_queue_entry=False)
@@ -769,6 +824,9 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
 
 
 class CharacterisationQueueEntry(BaseQueueEntry):
+    """
+    Defines the behaviour of a characterisation
+    """
     def __init__(self, view=None, data_model=None,
                  view_set_queue_entry=True):
 
@@ -793,6 +851,7 @@ class CharacterisationQueueEntry(BaseQueueEntry):
             edna_input = self.data_analysis_hwobj.\
                          from_params(reference_image_collection,
                                      characterisation_parameters)
+            #Un-comment to use the test input files
             #edna_input = XSDataInputMXCuBE.parseString(edna_test_data.EDNA_TEST_DATA)
             #edna_input.process_directory = reference_image_collection.acquisitions[0].\
             #                                path_template.process_directory
@@ -800,14 +859,16 @@ class CharacterisationQueueEntry(BaseQueueEntry):
             self.edna_result = self.data_analysis_hwobj.characterise(edna_input)
 
         if self.edna_result:
-            logging.getLogger("user_level_log").\
-                info("Characterisation successful.")
+            log.info("Characterisation successful.")
 
             char.html_report = self.data_analysis_hwobj.\
                                get_html_report(self.edna_result)
 
-            strategy_result = self.edna_result.getCharacterisationResult().\
-                              getStrategyResult()
+            try:
+                strategy_result = self.edna_result.getCharacterisationResult().\
+                                  getStrategyResult()
+            except:
+                strategy_result = None
 
             if strategy_result:
                 collection_plan = strategy_result.getCollectionPlan()
@@ -850,9 +911,7 @@ class CharacterisationQueueEntry(BaseQueueEntry):
             else:
                 self.get_view().setText(1, "No result")
                 self.status = QUEUE_ENTRY_STATUS.WARNING
-                log.info("EDNA-Characterisation completed " +\
-                         "successfully but without collection plan.")
-                log.warning("Characterisation completed" +\
+                log.warning("Characterisation completed " +\
                             "successfully but without collection plan.")
         else:
             self.get_view().setText(1, "Charact. Failed")
@@ -990,10 +1049,10 @@ class EnergyScanQueueEntry(BaseQueueEntry):
 
         (pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm,
          chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title) = \
-        self.energy_scan_hwobj.doChooch(None, energy_scan.element_symbol,
-                                        energy_scan.edge,
-                                        scan_file_archive_path,
-                                        scan_file_path)
+         self.energy_scan_hwobj.doChooch(None, energy_scan.element_symbol,
+                                         energy_scan.edge,
+                                         scan_file_archive_path,
+                                         scan_file_path)
 
         #scan_info = self.energy_scan_hwobj.scanInfo
 
@@ -1029,22 +1088,40 @@ class GenericWorkflowQueueEntry(BaseQueueEntry):
 
     def execute(self):
         BaseQueueEntry.execute(self)
-
+        
+        # Start execution of a new workflow
         if str(self.workflow_hwobj.state.value) != 'ON':
+            # We are trying to start a new workflow and the Tango server is not idle,
+            # therefore first abort any running workflow: 
             self.workflow_hwobj.abort()
-            time.sleep(3)
-
-            while str(self.workflow_hwobj.state.value) != 'ON':
-                time.sleep(0.5)
+            if self.workflow_hwobj.command_failure():
+                msg = "Workflow abort command failed! Please check workflow Tango server."
+                logging.getLogger("user_level_log").error(msg)
+            else:
+                # Then sleep three seconds for allowing the server to abort a running workflow:
+                time.sleep(3)
+                # If the Tango server has been restarted the state.value is None.
+                # If not wait till the state.value is "ON":
+                if self.workflow_hwobj.state.value is not None:
+                    while str(self.workflow_hwobj.state.value) != 'ON':
+                        time.sleep(0.5)
 
         msg = "Starting workflow (%s), please wait." % (self.get_data_model()._type)
         logging.getLogger("user_level_log").info(msg)
         workflow_params = self.get_data_model().params_list
-        self.workflow_running = True
+        # Add the current node id to workflow parameters
+        #group_node_id = self._parent_container._data_model._node_id
+        #workflow_params.append("group_node_id")
+        #workflow_params.append("%d" % group_node_id)
         self.workflow_hwobj.start(workflow_params)
-
-        while self.workflow_running:
-            time.sleep(1)
+        if self.workflow_hwobj.command_failure():
+            msg = "Workflow start command failed! Please check workflow Tango server."
+            logging.getLogger("user_level_log").error(msg)
+            self.workflow_running = False
+        else:
+            self.workflow_running = True
+            while self.workflow_running:
+                time.sleep(1)
 
     def workflow_state_handler(self, state):
         if isinstance(state, tuple):
@@ -1057,13 +1134,12 @@ class GenericWorkflowQueueEntry(BaseQueueEntry):
         elif state == 'RUNNING':
             self.workflow_started = True
         elif state == 'OPEN':
-            msg = "Workflow waiting for input"
+            msg = "Workflow waiting for input, verify parameters and press continue."
             logging.getLogger("user_level_log").warning(msg)
             self.get_queue_controller().show_workflow_tab() 
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
-        
         qc = self.get_queue_controller()
         self.workflow_hwobj = self.beamline_setup.workflow_hwobj
 
@@ -1094,9 +1170,15 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
 
     loc = data_model.location
     holder_length = data_model.holder_length
-    beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
-                                                          sample_location=loc,
-                                                          wait=True)
+
+    if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__')\
+       and (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
+        element = '%d:%02d' % loc
+        beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
+    else:
+        beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
+                                                              sample_location=loc,
+                                                              wait=True)
 
     dm = beamline_setup_hwobj.diffractometer_hwobj
 
@@ -1105,7 +1187,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
             dm.connect("centringAccepted", centring_done_cb)
             centring_method = view.listView().parent().\
                               centring_method
-
+                  
             if centring_method == CENTRING_METHOD.MANUAL:
                 log.warning("Manual centring used, waiting for" +\
                             " user to center sample")
@@ -1114,13 +1196,14 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                 dm.startCentringMethod(dm.C3D_MODE)
                 log.warning("Centring in progress. Please save" +\
                             " the suggested centring or re-center")
-            elif centring_method == CENTRING_METHOD.CRYSTAL:
+            elif centring_method == CENTRING_METHOD.FULLY_AUTOMATIC:
                 log.info("Centring sample, please wait.")
-                dm.startAutoCentring()
-                log.warning("Please save or reject the centring")
+                dm.startCentringMethod(dm.C3D_MODE)
 
             view.setText(1, "Centring !")
             async_result.get()
+            view.setText(1, "Centring done !")
+            log.info("Centring saved")
         finally:
             dm.disconnect("centringAccepted", centring_done_cb)
 
