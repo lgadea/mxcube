@@ -7,7 +7,8 @@ import errno
 import abc
 import collections
 import gevent
-import xmlrpclib
+import autoprocessing
+import gevent
 from HardwareRepository.TaskUtils import *
 
 BeamlineControl = collections.namedtuple('BeamlineControl',
@@ -66,6 +67,7 @@ class AbstractMultiCollect(object):
         self.data_collect_task = None
         self.oscillations_history = []
         self.current_lims_sample = None
+        self.__safety_shutter_close_task = None
 
 
     def setControlObjects(self, **control_objects):
@@ -128,6 +130,10 @@ class AbstractMultiCollect(object):
     @task
     def open_safety_shutter(self):
         pass
+
+   
+    def safety_shutter_opened(self):
+        return False
 
 
     @abc.abstractmethod
@@ -381,7 +387,10 @@ class AbstractMultiCollect(object):
         pass
 
     @task
-    def do_collect(self, owner, data_collect_parameters, in_multicollect=False):
+    def do_collect(self, owner, data_collect_parameters):
+        if self.__safety_shutter_close_task is not None:
+            self.__safety_shutter_close_task.kill()
+
         # reset collection id on each data collect
         self.collection_id = None
 
@@ -423,7 +432,7 @@ class AbstractMultiCollect(object):
               
         # Creating the directory for images and processing information
         self.create_directories(file_parameters['directory'],  file_parameters['process_directory'])
-        self.xds_directory, self.mosflm_directory = self.prepare_input_files(file_parameters["directory"], file_parameters["prefix"], file_parameters["run_number"], file_parameters['process_directory'])
+        self.xds_directory, self.mosflm_directory, self.hkl2000_directory = self.prepare_input_files(file_parameters["directory"], file_parameters["prefix"], file_parameters["run_number"], file_parameters['process_directory'])
         data_collect_parameters['xds_dir'] = self.xds_directory
 
 	sample_id, sample_location, sample_code = self.get_sample_info_from_parameters(data_collect_parameters)
@@ -533,7 +542,7 @@ class AbstractMultiCollect(object):
                 self.bl_control.lims.update_data_collection(data_collect_parameters)
             except:
                 logging.getLogger("HWR").exception("Could not update data collection in LIMS")
-        #import pdb;pdb.set_trace()
+
         oscillation_parameters = data_collect_parameters["oscillation_sequence"][0]
         sample_id = data_collect_parameters['blSampleId']
         inverse_beam = "reference_interval" in oscillation_parameters
@@ -592,7 +601,8 @@ class AbstractMultiCollect(object):
         self.move_motors(motors_to_move_before_collect)
 
         with cleanup(self.data_collection_cleanup):
-            self.open_safety_shutter(timeout=10)
+            if not self.safety_shutter_opened():
+                self.open_safety_shutter(timeout=10)
 
             self.prepare_intensity_monitors()
            
@@ -610,10 +620,19 @@ class AbstractMultiCollect(object):
                     data_collect_parameters["detectorDistance"] =  self.get_detector_distance()
                     data_collect_parameters["resolution"] = self.get_resolution()
                     data_collect_parameters["transmission"] = self.get_transmission()
+                    """
                     gap1, gap2, gap3 = self.get_undulators_gaps()
                     data_collect_parameters["undulatorGap1"] = gap1
                     data_collect_parameters["undulatorGap2"] = gap2
                     data_collect_parameters["undulatorGap3"] = gap3
+                    """
+                    und = self.get_undulators_gaps()
+                    i = 1
+                    for key in und:
+                        self.bl_config.undulators[i-1].type = key
+                        data_collect_parameters["undulatorGap%d" %i] = und[key]  
+                        i += 1
+
                     data_collect_parameters["resolutionAtCorner"] = self.get_resolution_at_corner()
                     beam_size_x, beam_size_y = self.get_beam_size()
                     data_collect_parameters["beamSizeAtSampleX"] = beam_size_x
@@ -627,6 +646,7 @@ class AbstractMultiCollect(object):
                     data_collect_parameters["yBeam"] = beam_centre_y
 
                     logging.info("Updating data collection in ISPyB")
+
                     self.bl_control.lims.update_data_collection(data_collect_parameters, wait=True)
                     logging.info("Done")
                   except:
@@ -654,7 +674,6 @@ class AbstractMultiCollect(object):
                                        data_collect_parameters["residues"],
                                        inverse_beam,
                                        data_collect_parameters["do_inducedraddam"],
-                                       in_multicollect,
                                        data_collect_parameters.get("sample_reference", {}).get("spacegroup", ""),
                                        data_collect_parameters.get("sample_reference", {}).get("cell", ""))
 
@@ -671,7 +690,7 @@ class AbstractMultiCollect(object):
                 file_location = file_parameters["directory"]
                 file_path  = os.path.join(file_location, filename)
                 
-                logging.info("Frame %d, %7.3f to %7.3f degrees", frame, start, end)
+                #logging.info("Frame %d, %7.3f to %7.3f degrees", frame, start, end)
 
                 self.set_detector_filenames(frame, start, file_path, jpeg_full_path, jpeg_thumbnail_full_path)
                 
@@ -721,7 +740,6 @@ class AbstractMultiCollect(object):
                                                    data_collect_parameters["residues"],
                                                    inverse_beam,
                                                    data_collect_parameters["do_inducedraddam"],
-                                                   in_multicollect,
                                                    data_collect_parameters.get("sample_reference", {}).get("spacegroup", ""),
                                                    data_collect_parameters.get("sample_reference", {}).get("cell", ""))
                 frame += 1
@@ -733,7 +751,6 @@ class AbstractMultiCollect(object):
     def loop(self, owner, data_collect_parameters_list):
         failed_msg = "Data collection failed!"
         failed = True
-        in_multicollect = len(data_collect_parameters_list) > 1
         collections_analyse_params = []
 
         try:
@@ -749,7 +766,7 @@ class AbstractMultiCollect(object):
                   data_collect_parameters["status"]='Running'
                   
                   # now really start collect sequence
-                  self.do_collect(owner, data_collect_parameters, in_multicollect=in_multicollect)
+                  self.do_collect(owner, data_collect_parameters)
                 except:
                   failed = True
                   exc_type, exc_value, exc_tb = sys.exc_info()
@@ -769,7 +786,6 @@ class AbstractMultiCollect(object):
                                                  data_collect_parameters["residues"],
                                                  "reference_interval" in data_collect_parameters["oscillation_sequence"][0],
                                                  data_collect_parameters["do_inducedraddam"],
-                                                 in_multicollect,
                                                  data_collect_parameters.get("sample_reference", {}).get("spacegroup", ""),
                                                  data_collect_parameters.get("sample_reference", {}).get("cell", ""))
                 except:
@@ -798,7 +814,7 @@ class AbstractMultiCollect(object):
                   self.emit("collectOscillationFinished", (owner, True, data_collect_parameters["status"], self.collection_id, osc_id, data_collect_parameters))
 
             try:
-              self.close_safety_shutter(timeout=10)
+              self.__safety_shutter_close_task = gevent.spawn_later(1*60, self.close_safety_shutter, timeout=10)
             except:
               logging.exception("Could not close safety shutter")
 
@@ -807,9 +823,6 @@ class AbstractMultiCollect(object):
             #     finished_callback()
             #   except:
             #     logging.getLogger("HWR").exception("Exception while calling finished callback")
-            if in_multicollect:
-                self.trigger_auto_processing("end_multicollect",
-                                             collections_analyse_params)
         finally:
            self.emit("collectEnded", owner, not failed, failed_msg if failed else "Data collection successful")
            self.emit("collectReady", (True, ))
@@ -831,7 +844,7 @@ class AbstractMultiCollect(object):
         Description    : executes a script after the data collection has finished
         Type           : method
     """
-    def trigger_auto_processing(self, process_event, xds_dir, EDNA_files_dir=None, anomalous=None, residues=200, inverse_beam=False, do_inducedraddam=False, in_multicollect=False, spacegroup=None, cell=None):
+    def trigger_auto_processing(self, process_event, xds_dir, EDNA_files_dir=None, anomalous=None, residues=200, inverse_beam=False, do_inducedraddam=False, spacegroup=None, cell=None):
       # quick fix for anomalous, do_inducedraddam... passed as a string!!!
       # (comes from the queue)
       if type(anomalous) == types.StringType:
@@ -850,48 +863,29 @@ class AbstractMultiCollect(object):
           residues = 200
 
       try:
-         server = self.bl_config.auto_processing_server
-         if server is None:
-           return
-      except:
-        return
+        if type(xds_dir) == types.ListType:
+            processAnalyseParams["collections_params"] = xds_dir
+        else:
+            processAnalyseParams['datacollect_id'] = self.collection_id
+            processAnalyseParams['xds_dir'] = xds_dir
+        processAnalyseParams['anomalous'] = anomalous
+        processAnalyseParams['residues'] = residues
+        processAnalyseParams['inverse_beam']= inverse_beam
+        processAnalyseParams["spacegroup"]=spacegroup
+        processAnalyseParams["cell"]=cell
+      except Exception,msg:
+        logging.getLogger().exception("DataCollect:processing: %r" % msg)
       else:
-           processAnalyseParams = {}
-           processAnalyseParams['EDNA_files_dir'] = EDNA_files_dir
-
-           try:
-             if type(xds_dir) == types.ListType:
-                 processAnalyseParams["collections_params"] = xds_dir
-             else:
-                 processAnalyseParams['datacollect_id'] = self.collection_id
-                 processAnalyseParams['xds_dir'] = xds_dir
-             processAnalyseParams['anomalous'] = anomalous
-             processAnalyseParams['residues'] = residues
-             processAnalyseParams['inverse_beam']= inverse_beam
-             processAnalyseParams["in_multicollect"]=in_multicollect
-             processAnalyseParams["spacegroup"]=spacegroup
-             processAnalyseParams["cell"]=cell
-           except Exception,msg:
-             logging.getLogger().exception("DataCollect:processing: %r" % msg)
-           else:
-             logging.info("AUTO PROCESSING: %s, %s, %s, %s, %s, %s, %s, %s", process_event, EDNA_files_dir, anomalous, residues, inverse_beam, do_inducedraddam, spacegroup, cell)
-             
-             try:
-                   server_proxy = xmlrpclib.Server("http://%s" % server,allow_none=True)
-             except:
-                   logging.exception("Cannot create XML-RPC server instance")
-
-             try: 
-               server_proxy.startProcessing(process_event, processAnalyseParams)
-             except Exception,msg:
-               logging.getLogger().exception("Error starting processing, is the autoprocessing server correctly configured?: %r" % msg)
-
-             if process_event=="after" and do_inducedraddam:
-                 #str(self.persistentValues["arguments"]["do_inducedraddam"]) == 'True':
-                 try:
-                     #logging.info("executing: server_proxy.startInducedRadDam(%r)", processAnalyseParams)
-                     server_proxy.startInducedRadDam(processAnalyseParams)
-                 except Exception, msg:
-                     logging.exception("Error starting induced rad.dam: %s", msg)
-             
+        #logging.info("AUTO PROCESSING: %s, %s, %s, %s, %s, %s, %r, %r", process_event, EDNA_files_dir, anomalous, residues, inverse_beam, do_inducedraddam, spacegroup, cell)
+            
+        try: 
+            autoprocessing.start(self["auto_processing"], process_event, processAnalyseParams)
+        except:
+            logging.getLogger().exception("Error starting processing")
+          
+        if process_event=="after" and do_inducedraddam:
+            try:
+              autoprocessing.startInducedRadDam(processAnalyseParams)
+            except:
+              logging.exception("Error starting induced rad.dam")
                

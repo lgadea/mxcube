@@ -1,11 +1,12 @@
 from ESRFMultiCollect import *
 import shutil
 import logging
+import time
 
 class ID29MultiCollect(ESRFMultiCollect):
     def __init__(self, name):
         ESRFMultiCollect.__init__(self, name, PixelDetector(), TunableEnergy())
-       
+
     @task
     def data_collection_hook(self, data_collect_parameters):
       oscillation_parameters = data_collect_parameters["oscillation_sequence"][0]
@@ -31,6 +32,7 @@ class ID29MultiCollect(ESRFMultiCollect):
     @task
     def move_detector(self, detector_distance):
         self.bl_control.detector_distance.move(detector_distance)
+        time.sleep(1)
         self.bl_control.detector_distance.waitMove()
 
     def get_detector_distance(self):
@@ -39,6 +41,7 @@ class ID29MultiCollect(ESRFMultiCollect):
     @task
     def set_resolution(self, new_resolution):
         self.bl_control.resolution.move(new_resolution)
+        time.sleep(1)
         self.bl_control.resolution.waitMove()
 
     def trigger_auto_processing(self, process_event, *args, **kwargs):       
