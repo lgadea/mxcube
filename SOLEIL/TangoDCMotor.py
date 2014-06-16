@@ -5,6 +5,8 @@ import time
 from HardwareRepository.BaseHardwareObjects import Device
 from HardwareRepository.Command.Tango import TangoCommand
 
+from PyTango import DeviceProxy
+
 from qt import qApp
 
 class TangoDCMotor(Device):
@@ -134,6 +136,7 @@ class TangoDCMotor(Device):
         prev_position      = self.getPosition()
         self.positionValue = position
 
+        time.sleep(0.5) # allow MD2 to change the state
         while self.stateValue == "RUNNING" or self.stateValue == "MOVING": # or self.stateValue == SpecMotor.MOVESTARTED:
             qApp.processEvents(100)
 
@@ -156,9 +159,19 @@ class TangoDCMotor(Device):
     def syncMoveRelative(self, position):
         old_pos = self.positionValue
         self.positionValue = old_pos + position
+        logging.info("TangoDCMotor: syncMoveRelative going to %s " % str( self.convertValue(self.positionValue)))
         self.positionChan.setValue( self.convertValue(self.positionValue) )
 
-        while self.stateValue == "RUNNING" or self.stateValue == "MOVING":
+        dev = DeviceProxy(self.tangoname)
+        time.sleep(0.5) # allow MD2 to change the state
+
+        mystate = str( dev.State() )
+        logging.info("TangoDCMotor: %s syncMoveRelative state is %s / %s " % ( self.tangoname, str( self.stateValue ), mystate))
+
+        while mystate == "RUNNING" or mystate == "MOVING":
+            logging.info("TangoDCMotor: syncMoveRelative is moving %s" % str( mystate ))
+            time.sleep(0.1)
+            mystate = str( dev.State() )
             qApp.processEvents(100)
         
     def getMotorMnemonic(self):
@@ -172,17 +185,15 @@ class TangoDCMotor(Device):
         """
         logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: type '%s'", absolutePosition, type(absolutePosition))
         if type(absolutePosition) != float and type(absolutePosition) != int:
-            logging.getLogger("TangoClient").error("Cannot move %s: position '%s' is not a number. It is a %s", self.tangoname, absolutePosition, type(absolutePosition))
-        logging.info("TangoDCMotor: move. motor will go to %s " % str(absolutePosition))   
-        logging.getLogger("HWR").info("TangoDCMotor.move to absolute position: %.3f" % absolutePosition)
-        logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: that is a '%s'", absolutePosition, type(absolutePosition))
-        self.positionChan.setValue( self.convertValue(absolutePosition) )
+            self.positionChan.setValue(self.convertValue(absolutePosition))
+        else:
+            self.positionChan.setValue(absolutePosition)
 
     def stop(self):
         logging.getLogger("HWR").info("TangoDCMotor.stop")
         stopcmd = self.getCommandObject("Stop")()
         if not stopcmd:
-           stopcmd = TangoCommand("stopcmd", "Stop", self.tangoname)
+           stopcmd = TangoCommand("stopcmd","Stop",self.tangoname)
         stopcmd()
 
     def isSpecConnected(self):

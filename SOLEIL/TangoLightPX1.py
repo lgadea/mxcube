@@ -9,6 +9,7 @@ class TangoLightPX1(Device):
         self.currentState = "unknown"
 
     def init(self):
+        #self.tangoname = self.
         self.attrchan = self.getChannelObject("attributeName")
         self.attrchan.connectSignal("update", self.valueChanged)
 

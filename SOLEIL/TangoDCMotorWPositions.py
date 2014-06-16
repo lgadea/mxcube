@@ -71,11 +71,9 @@ class TangoDCMotorWPositions(TangoDCMotor):
             self.emit(signal, (self.getZoomLevel(), ))
 
     def motorStateChanged(self, channelValue):
-        logging.info('motorStateChanged (MY) %s.', channelValue )
         TangoDCMotor.motorStateChanged(self, channelValue)
         
     def positionChanged(self, channelValue):
-        logging.info('motorPositionChanged (MY) %s.', channelValue )
         TangoDCMotor.positionChanged(self, channelValue)
         self.checkPredefinedPosition()
        

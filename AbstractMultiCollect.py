@@ -16,6 +16,7 @@ BeamlineControl = collections.namedtuple('BeamlineControl',
                                           #'slitbox',
                                           'lims',
                                           'safety_shutter',
+                                          'fast_shutter',
                                           'machine_current',
                                           'cryo_stream',
                                           'energy',
@@ -60,7 +61,7 @@ class AbstractMultiCollect(object):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self):
-        self.bl_control = BeamlineControl(*[None]*12)
+        self.bl_control = BeamlineControl(*[None]*13)
         self.bl_config = BeamlineConfig(*[None]*28)
         self.data_collect_task = None
         self.oscillations_history = []

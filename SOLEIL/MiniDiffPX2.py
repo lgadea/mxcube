@@ -1,6 +1,8 @@
 
 import logging, time, math, numpy
 from MiniDiff import MiniDiff
+from gevent.event import AsyncResult
+import gevent
 import PyTango
 
 
@@ -11,6 +13,7 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, b
   X, Y = [], []
   centredPosRel = {}
 
+  logging.info("=== MANUAL CENTRING STARTED")
   if all([x.isReady() for x in (phi, phiy, phiz, sampx, sampy)]):
     phiSavedPosition = phi.getPosition()
     phiSavedDialPosition = 327.3 
@@ -22,11 +25,13 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, b
   try:  
     while True:
       USER_CLICKED_EVENT = AsyncResult()
+      logging.info("=== WAITING FOR USER INPUT")
       x, y = USER_CLICKED_EVENT.get()
       X.append(x)
       Y.append(y)
       if len(X) == 3:
         break
+      logging.info("=== CLICKED")
       phi.moveRelative(90)
 
     yc = (Y[0]+Y[2]) / 2
@@ -46,6 +51,7 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ, b
                    sampy: sampy.getPosition() + float(dy),
                    phiy: phiy.getPosition() + phiy_direction * (x - beam_xc_real),
                    phiz: phiz.getPosition() + (y - beam_yc_real) }
+    logging.info("=== centredPos %s" % str(centredPos))
     return centredPos
   except:
     phi.move(phiSavedPosition)    
@@ -72,9 +78,9 @@ class MiniDiffPX2(MiniDiff):
     def init(self):
         self.md2          = PyTango.DeviceProxy('i11-ma-cx1/ex/md2')
         self.beamPosition = PyTango.DeviceProxy('i11-ma-cx1/ex/md2-beamposition')
-        MiniDiff.MiniDiff.init(self)
+        MiniDiff.init(self)
 
-    def getCalibrationData(self):
+    def getCalibrationData(self, offset):
         return 1000./self.md2.CoaxCamScaleX, 1000./self.md2.CoaxCamScaleY
 
     def getBeamPosX(self):
@@ -102,6 +108,11 @@ class MiniDiffPX2(MiniDiff):
                                                      self.phiy_direction)
 
         self.currentCentringProcedure.link(self.manualCentringDone)
+
+    def imageClicked(self, x, y, xi, yi):
+        USER_CLICKED_EVENT.set((x,y))
+
+
 
     def setScanStartAngle(self, sangle):
         logging.info("MiniDiffPX2 / setting start angle to %s ", sangle )

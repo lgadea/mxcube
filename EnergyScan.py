@@ -28,7 +28,7 @@ class EnergyScan(Equipment):
         except KeyError:
             self.defaultWavelengthChannel=None
         else:
-            self.defaultWavelengthChannel.connectSignal("connected", self.sConnected) 
+            self.defaultWavelengthChannel.connectSignal("connected", self.sConnected)
             self.defaultWavelengthChannel.connectSignal("disconnected", self.sDisconnected)
 
         if self.defaultWavelengthChannel is None:
@@ -308,7 +308,7 @@ class EnergyScan(Equipment):
         while os.path.isfile(os.path.extsep.join((scanArchiveFilePrefix + str(i), "raw"))):
             i = i + 1
 
-        scanArchiveFilePrefix = scanArchiveFilePrefix + str(i) 
+        scanArchiveFilePrefix = scanArchiveFilePrefix + str(i)
         archiveRawScanFile=os.path.extsep.join((scanArchiveFilePrefix, "raw"))
         rawScanFile=os.path.extsep.join((scanFilePrefix, "raw"))
         scanFile=os.path.extsep.join((scanFilePrefix, "efs"))
@@ -327,7 +327,7 @@ class EnergyScan(Equipment):
         else:
             scanData = []
             
-            if scanObject is None:                
+            if scanObject is None:
                 raw_data_file = os.path.join(os.path.dirname(scanFilePrefix), 'data.raw')
                 try:
                     raw_file = open(raw_data_file, 'r')
@@ -347,11 +347,11 @@ class EnergyScan(Equipment):
             else:
                 for i in range(len(scanObject.x)):
                     x = float(scanObject.x[i])
-                    x = x < 1000 and x*1000.0 or x 
+                    x = x < 1000 and x*1000.0 or x
                     y = float(scanObject.y[i])
                     scanData.append((x, y))
                     f.write("%f,%f\r\n" % (x, y))
-                    pyarch_f.write("%f,%f\r\n"% (x, y)) 
+                    pyarch_f.write("%f,%f\r\n"% (x, y))
 
             f.close()
             pyarch_f.close()
@@ -402,7 +402,7 @@ class EnergyScan(Equipment):
 
         logging.getLogger("HWR").info("<chooch> Saving png" )
         # prepare to save png files
-        title="%10s  %6s  %6s\n%10s  %6.2f  %6.2f\n%10s  %6.2f  %6.2f" % ("energy", "f'", "f''", pk, fpPeak, fppPeak, ip, fpInfl, fppInfl) 
+        title="%10s %6s %6s\n%10s %6.2f %6.2f\n%10s %6.2f %6.2f" % ("energy", "f'", "f''", pk, fpPeak, fppPeak, ip, fpInfl, fppInfl)
         fig=Figure(figsize=(15, 11))
         ax=fig.add_subplot(211)
         ax.set_title("%s\n%s" % (scanFile, title))
@@ -420,7 +420,7 @@ class EnergyScan(Equipment):
         canvas=FigureCanvasAgg(fig)
 
         escan_png = os.path.extsep.join((scanFilePrefix, "png"))
-        escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png")) 
+        escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png"))
         self.scanInfo["jpegChoochFileFullPath"]=str(escan_archivepng)
         try:
           logging.getLogger("HWR").info("Rendering energy scan and Chooch graphs to PNG file : %s", escan_png)
@@ -463,7 +463,7 @@ class EnergyScan(Equipment):
         if self.energyMotor is not None:
             try:
                 return self.energyMotor.getPosition()
-            except: 
+            except:
                 logging.getLogger("HWR").exception("EnergyScan: couldn't read energy")
                 return None
         elif self.energy2WavelengthConstant is not None and self.defaultWavelength is not None:
@@ -546,7 +546,7 @@ class EnergyScan(Equipment):
                     gevent.spawn(change_egy)
             else:
                 logging.getLogger("HWR").error("EnergyScan: energy (%f) out of limits (%s)" % (value,lims))
-                return False          
+                return False
         else:
             return None
 
