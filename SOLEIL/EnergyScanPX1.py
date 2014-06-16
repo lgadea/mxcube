@@ -22,7 +22,7 @@ from PyTango import DeviceProxy
 import numpy
 import pickle
 
-class EnergyScan(Equipment):
+class EnergyScanPX1(Equipment):
     
     MANDATORY_HO={"BLEnergy":"BLEnergy"}
     
