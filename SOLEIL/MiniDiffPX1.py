@@ -4,7 +4,9 @@ from gevent.event import AsyncResult
 import numpy
 import math
 import logging, time
-from MiniDiff import MiniDiff, manual_centring
+from MiniDiff import MiniDiff
+
+#from MiniDiff import MiniDiff, manual_centring
 import PyTango
 from HardwareRepository.TaskUtils import *
 USER_CLICKED_EVENT = AsyncResult()
@@ -214,8 +216,16 @@ class MiniDiffPX1(MiniDiff):
    def getBeamPosY(self):
         return self.beam_yc
 
+   def get_pixels_per_mm(self):
+       return (self.calib_x or 0, self.calib_y or 0)
+
    def getCalibrationData(self, offset):
-       #logging.info("XX1: getCalibration, OFFSET: %s", offset)
+       logging.info("XX1: getCalibration, OFFSET: %s", offset)
+
+       if self.lightMotor is None or self.lightMotor.positionChan.device is None:
+           logging.info("XX1: getCalibration, Not yet initialized")
+           return (None,None)
+
        if self.zoomMotor is not None:
            if self.zoomMotor.hasObject('positions'):
                for position in self.zoomMotor['positions']:
@@ -230,11 +240,10 @@ class MiniDiffPX1(MiniDiff):
                        print "CALIBR:", (self.calib_x, self.calib_y)
                        print "BEAMXY:", (self.beam_xc, self.beam_yc)
                        return (self.calib_x or 0, self.calib_y or 0)
-       #logging.error("!!! ERROR in zoom calibration")
+
        return (None, None)
 
    def motor_positions_to_screen(self, centred_positions_dict):
-       logging.info("XX1: setting start angle to %s ", sangle )
        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
        phi_angle = math.radians(-self.phiMotor.getPosition()) #centred_positions_dict["phi"])
        #logging.info("CENTRED POS DICT = %r", centred_positions_dict)
