@@ -56,29 +56,29 @@ class BeamInfoPX1(Equipment):
        
     def init(self):
 
-        try:
-            self.chanBeamSizeX = self.getChannelObject('beamsizex')
-            self.chanBeamSizeX.connectSignal('update', self.beamSizeXChanged)
-        except KeyError:
-            logging.getLogger().warning('%s: cannot connect to beamsize x channel ', self.name())
-
-        try:
-            self.chanBeamSizeY = self.getChannelObject('beamsizey')
-            self.chanBeamSizeY.connectSignal('update', self.beamSizeYChanged)
-        except KeyError:
-            logging.getLogger().warning('%s: cannot connect to beamsize y channel ', self.name())
-
-        try:
-            self.chanBeamPosX = self.getChannelObject('positionx')
-            self.chanBeamPosX.connectSignal('update', self.beamPosXChanged)
-        except KeyError:
-            logging.getLogger().warning('%s: cannot connect to beamposition x channel ', self.name())
-
-        try:
-            self.chanBeamPosY = self.getChannelObject('positiony')
-            self.chanBeamPosY.connectSignal('update', self.beamPosYChanged)
-        except KeyError:
-            logging.getLogger().warning('%s: cannot connect to beamposition z channel ', self.name())
+        # try:
+            # self.chanBeamSizeX = self.getChannelObject('beamsizex')
+            # self.chanBeamSizeX.connectSignal('update', self.beamSizeXChanged)
+        # except KeyError:
+            # logging.getLogger().warning('%s: cannot connect to beamsize x channel ', self.name())
+# 
+        # try:
+            # self.chanBeamSizeY = self.getChannelObject('beamsizey')
+            # self.chanBeamSizeY.connectSignal('update', self.beamSizeYChanged)
+        # except KeyError:
+            # logging.getLogger().warning('%s: cannot connect to beamsize y channel ', self.name())
+# 
+        # try:
+            # self.chanBeamPosX = self.getChannelObject('positionx')
+            # self.chanBeamPosX.connectSignal('update', self.beamPosXChanged)
+        # except KeyError:
+            # logging.getLogger().warning('%s: cannot connect to beamposition x channel ', self.name())
+# 
+        # try:
+            # self.chanBeamPosY = self.getChannelObject('positiony')
+            # self.chanBeamPosY.connectSignal('update', self.beamPosYChanged)
+        # except KeyError:
+            # logging.getLogger().warning('%s: cannot connect to beamposition z channel ', self.name())
 
         self.zoomMotor = self.getDeviceByRole("zoom")
 
@@ -100,13 +100,15 @@ class BeamInfoPX1(Equipment):
 
     def beamSizeXChanged(self, value):
         logging.getLogger().info('beamSizeX changed. It is %s ' % value)
-        self.beam_size[0] = value
-        self.sizeUpdated() 
+        #if value is not None:
+        #    self.beam_size[0] = value
+        #    self.sizeUpdated() 
 
     def beamSizeYChanged(self, value):
         logging.getLogger().info('beamSizeY changed. It is %s ' % value)
-        self.beam_size[1] = value
-        self.sizeUpdated() 
+        #if value is not None:
+        #    self.beam_size[1] = value
+        #    self.sizeUpdated() 
 
     def beamPosXChanged(self, value):
         logging.getLogger().info('beamPosX changed. It is %s ' % value)

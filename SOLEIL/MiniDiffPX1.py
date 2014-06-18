@@ -4,7 +4,7 @@ from gevent.event import AsyncResult
 import numpy
 import math
 import logging, time
-from MiniDiff import MiniDiff
+from MiniDiff import MiniDiff, myimage
 
 #from MiniDiff import MiniDiff, manual_centring
 import PyTango
@@ -136,6 +136,9 @@ def move_to_centred_position(centred_pos):
 
 class MiniDiffPX1(MiniDiff):
 
+   def __init__(self,*args):
+       MiniDiff.__init__(self, *args)
+   
    def _init(self,*args):
        MiniDiff._init(self, *args)
 
@@ -325,3 +328,74 @@ class MiniDiffPX1(MiniDiff):
                "zoom": self.zoomMotor.getPosition()}
                #"focus": self.focusMotor.getPosition(),         
                #"kappa_phi": self.kappaPhiMotor.getPosition(),
+
+   def takeSnapshots(self, wait=False):
+        self.camera.forceUpdate = True
+
+        # try:
+        #     centring_valid=self.centringStatus["valid"]
+        # except:
+        #     centring_valid=False
+        # if not centring_valid:
+        #     logging.getLogger("HWR").error("MiniDiff: you must centre the crystal before taking the snapshots")
+        # else:
+        snapshotsProcedure = gevent.spawn(take_snapshots, self.lightWago, self.lightMotor ,self.phiMotor,self.zoomMotor,self._drawing)
+        self.emit('centringSnapshots', (None,))
+        self.emitProgressMessage("Taking snapshots")
+        self.centringStatus["images"]=[]
+        snapshotsProcedure.link(self.snapshotsDone)
+
+        if wait:
+          self.centringStatus["images"] = snapshotsProcedure.get()
+
+def take_snapshots(light, light_motor, phi, zoom, drawing):
+
+  centredImages = []
+
+  logging.getLogger("HWR").info("PX1 take snapshots")
+
+  if light is not None:
+
+    logging.getLogger("HWR").info("take snapshots:  putting the light in")
+    light.wagoIn()
+
+    zoom_level  = zoom.getPosition()
+    light_level = light_motor.getPosition()
+    logging.getLogger("HWR").info("take snapshots:  zoom level is %s / light level is %s" % (str(zoom_level), str(light_level)))
+
+    # No light level, choose default
+    if light_motor.getPosition() == 0:
+
+       light_level = None
+
+       logging.getLogger().info("take snapshots: looking for default light level for this zoom ")
+       for position in zoom['positions']:
+          try:
+              offset = position.offset
+              logging.getLogger().info("take snapshots: zoom-level is: %s / comparing with table position: %s " % (str(zoom_level), str(offset)))
+              if int(offset) == int(zoom_level):
+                 light_level = position['ligthLevel']
+                 logging.getLogger().info("take snapshots - light level for zoom position %s is %s" % (str(zoom_level),str(light_level)))
+          except IndexError:
+              pass
+
+       if light_level:
+          light_motor.move(light_level)
+
+    t0 = time.time(); timeout = 5
+
+    while str( light.getWagoState()) != "INSERT":
+      time.sleep(0.5)
+      if (time.time() - t0) > timeout:
+          raise Exception("SnapshotException","Timeout while inserting light")
+
+  for i in range(4):
+     logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
+     centredImages.append((phi.getPosition(),str(myimage(drawing))))
+     phi.syncMoveRelative(-90)
+     time.sleep(2)
+
+  centredImages.reverse() # snapshot order must be according to positive rotation direction
+
+  return centredImages
+

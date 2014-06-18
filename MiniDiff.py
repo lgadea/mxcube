@@ -37,15 +37,18 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
   centredImages = []
 
   if light is not None:
+    logging.getLogger("HWR").info("take snapshots:  putting the light in")
     light.wagoIn()
 
     # No light level, choose default
     if light_motor.getPosition() == 0:
       zoom_level = zoom.getPosition()
+      logging.getLogger("HWR").info("take snapshots:  zoom level is %s" % str(zoom_level))
       light_level = None
 
       try:
         light_level = zoom['positions'][0][zoom_level].getProperty('lightLevel')
+        logging.getLogger("HWR").info("take snapshots: default light level is %s" % str(light_level))
       except IndexError:
         logging.getLogger("HWR").info("Could not get default light level")
         light_level = 1
