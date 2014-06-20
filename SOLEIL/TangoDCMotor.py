@@ -38,11 +38,12 @@ class TangoDCMotor(Device):
     def _init(self):
         self.positionValue = 0.0
         self.stateValue    = 'UNKNOWN'
-        self.threshold     = 0.0018   # default value. change it with property threshold in xml
+
+        threshold      = self.getProperty("threshold")
+        self.threshold = 0.0018   # default value. change it with property threshold in xml
 
         self.old_value = 0.
         self.tangoname = self.getProperty("tangoname")
-        threshold      = self.getProperty("threshold")
 
         try:
             self.dataType    = self.getProperty("datatype")
@@ -68,7 +69,9 @@ class TangoDCMotor(Device):
         self.positionValue = value
         if abs(value - self.old_value ) > self.threshold:
             try:
+                logging.getLogger("HWR").error("%s: TangoDCMotor new position  , %s", self.name(), value)
                 self.emit('positionChanged', (value,))
+                self.old_value = value
             except:
                 logging.getLogger("HWR").error("%s: TangoDCMotor not responding, %s", self.name(), '')
                 self.old_value = value

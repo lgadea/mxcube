@@ -325,7 +325,9 @@ class AbstractMultiCollect(object):
 
 
     def create_directories(self, *args):
+        logging.info("<AbstractMultiCollect> - create  dirs %s" % str(args))
         for directory in args:
+            logging.info("<AbstractMultiCollect> - create  one dirs %s" % directory)
             try:
                 os.makedirs(directory)
             except os.error, e:
@@ -431,8 +433,15 @@ class AbstractMultiCollect(object):
                 data_collect_parameters['detector_id'] = detector_id
               
         # Creating the directory for images and processing information
+        logging.info("<AbstractMultiCollect> - creating directories for images  %s" % str(file_parameters['directory']))
+        logging.info("<AbstractMultiCollect> - creating directories for processing  %s" % str(file_parameters['process_directory']))
+
         self.create_directories(file_parameters['directory'],  file_parameters['process_directory'])
+        logging.info("<AbstractMultiCollect> - xds_dir debug 1  ")
         self.xds_directory, self.mosflm_directory, self.hkl2000_directory = self.prepare_input_files(file_parameters["directory"], file_parameters["prefix"], file_parameters["run_number"], file_parameters['process_directory'])
+        logging.info("<AbstractMultiCollect> - xds_dir is %s" % self.xds_directory)
+        logging.info("<AbstractMultiCollect> - dc pars is %s" % str(data_collect_parameters))
+
         data_collect_parameters['xds_dir'] = self.xds_directory
 
 	sample_id, sample_location, sample_code = self.get_sample_info_from_parameters(data_collect_parameters)
@@ -601,6 +610,7 @@ class AbstractMultiCollect(object):
         self.move_motors(motors_to_move_before_collect)
 
         with cleanup(self.data_collection_cleanup):
+
             if not self.safety_shutter_opened():
                 self.open_safety_shutter(timeout=10)
 
@@ -690,7 +700,7 @@ class AbstractMultiCollect(object):
                 file_location = file_parameters["directory"]
                 file_path  = os.path.join(file_location, filename)
                 
-                #logging.info("Frame %d, %7.3f to %7.3f degrees", frame, start, end)
+                logging.info("Frame %d, %7.3f to %7.3f degrees", frame, start, end)
 
                 self.set_detector_filenames(frame, start, file_path, jpeg_full_path, jpeg_thumbnail_full_path)
                 
@@ -778,7 +788,9 @@ class AbstractMultiCollect(object):
                   data_collect_parameters["status"]='Data collection successful'
 
                 try:
+                  # comment in please
                   if data_collect_parameters.get("processing", False)=="True":
+                  #if data_collect_parameters.get("processing", False)=="False":
                     self.trigger_auto_processing("after",
                                                  self.xds_directory,
                                                  data_collect_parameters["EDNA_files_dir"],
@@ -835,6 +847,7 @@ class AbstractMultiCollect(object):
 
     #TODO: rename to stop_collect
     def stopCollect(self, owner):
+        logging.getLogger().debug("AbstractMultiCollect :stopCollect")
         if self.data_collect_task is not None:
             self.data_collect_task.kill(block = False)
 

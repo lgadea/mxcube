@@ -5,6 +5,8 @@ import numpy
 import math
 import logging, time
 from MiniDiff import MiniDiff, myimage
+from HardwareRepository import HardwareRepository
+
 
 #from MiniDiff import MiniDiff, manual_centring
 import PyTango
@@ -14,7 +16,7 @@ USER_CLICKED_EVENT = AsyncResult()
 
 def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
                     beam_xc, beam_yc, kappa, omega, phiy_direction=1):
-  logging.info("MiniDiffPX1: Starting manual_centring")
+  logging.info("MiniDiffPX1: Starting manual_centring now")
   global USER_CLICKED_EVENT
   X, Y, PHI = [], [], []
   centredPosRel = {}
@@ -25,6 +27,11 @@ def manual_centring(phi, phiy, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
     phiSavedDialPosition = 327.3
     logging.info("MiniDiff phi saved dial = %f " % phiSavedDialPosition)
   else:
+    logging.info("phi is ready = %s " % str(phi.isReady()))
+    logging.info("phiy is ready = %s " % str(phiy.isReady()))
+    logging.info("phiz is ready = %s " % str(phiz.isReady()))
+    logging.info("sampx is ready = %s " % str(sampx.isReady()))
+    logging.info("sampy is ready = %s " % str(sampy.isReady()))
     raise RuntimeError, "motors not ready"
   
   kappa.move(0)
@@ -142,14 +149,30 @@ class MiniDiffPX1(MiniDiff):
    def _init(self,*args):
        MiniDiff._init(self, *args)
 
-       self.md2_ready = True
+       bs_prop=self.getProperty("bstop")
+       self.bstop_ho = None
+       logging.getLogger().info("MiniDiffPX1.  Loading %s as beamstop " % str(bs_prop))
 
-       #try:
-       #   self.md2 = PyTango.DeviceProxy( self.tangoname )
-       #except:
-       #   logging.error("MiniDiffPX2 / Cannot connect to tango device: %s ", self.tangoname )
-       #else:
-       #   self.md2_ready = True
+       if bs_prop is not None:
+            try:
+                self.bstop_ho=HardwareRepository.HardwareRepository().getHardwareObject(bs_prop)
+            except:
+                import traceback
+                logging.getLogger().info("MiniDiffPX1.  Cannot load beamstop %s" % str(bs_prop))
+                logging.getLogger().info("    - reason: " + traceback.format_exc())
+
+       #la_prop=self.getProperty("lightarm")
+       #self.ligharm_ho = None
+       #logging.getLogger().info("MiniDiffPX1.  Loading %s as lightarm " % str(la_prop))
+#
+#       if la_prop is not None:
+#            try:
+#                self.lightarm_ho=HardwareRepository.HardwareRepository().getHardwareObject(la_prop)
+#            except:
+#                import traceback
+##                logging.getLogger().info("MiniDiffPX1.  Cannot load lightarm %s" % str(la_prop))
+#                logging.getLogger().info("    - reason: " + traceback.format_exc())
+
 
        # some defaults
        self.anticipation  = 1
@@ -165,40 +188,33 @@ class MiniDiffPX1(MiniDiff):
        #print "phi_is_moving", self.phiMotor.motorIsMoving()
        #print "phi_position", self.phiMotor.getPosition()
 
+   def prepareForAcquisition(self):
+       if self.beamstopIn() == -1:
+           raise Exception("Minidiff cannot get to acquisition mode")
+       #self.guillotineOut()
+
+   def beamstopIn(self):
+       if self.bstop_ho is not None:
+          self.bstop_ho.moveIn()
+          return 0
+       else:
+          return -1
+
+   def beamstopOut(self):
+       if self.bstop_ho is not None:
+          self.bstop_ho.moveOut()
+          return 0
+       else:
+          return -1
+   def guillotineIn(self):
+       pass
+   def guillotineOut(self):
+       pass
+
    def getState(self):
        logging.info("XX1 getState")
        print "phi_position", self.phiMotor.getPosition()
-       #return str( self.md2.state() )
        return "STANDBY"
-
-   def setScanStartAngle(self, sangle):
-       logging.info("XX1 / setting start angle to %s ", sangle )
-       if self.md2_ready:
-           self.md2.write_attribute("ScanStartAngle", sangle )
-
-   def startScan(self,wait=True):
-       logging.info("XX1 / starting scan " )
-
-       if self.md2_ready:
-           diffstate = self.getState()
-           logging.info("SOLEILCollect - diffractometer scan started  (state: %s)" % diffstate)
-           self.md2.StartScan()
-
-       # self.getCommandObject("start_scan")() - if we define start_scan command in *xml
-
-#   def goniometerReady(self, oscrange, npass, exptime):
-#       logging.info("MiniDiffPX2 / programming gonio oscrange=%s npass=%s exptime=%s" % (oscrange,npass, exptime) )
-#
-#       if self.md2_ready:
-#
-#          diffstate = self.getState()
-#          logging.info("SOLEILCollect - setting gonio ready (state: %s)" % diffstate)
-#
-#          self.md2.write_attribute('ScanAnticipation', self.anticipation)
-#          self.md2.write_attribute('ScanNumberOfPasses', npass)
-#          self.md2.write_attribute('ScanRange', oscrange)
-#          self.md2.write_attribute('ScanExposureTime', exptime)
-#          self.md2.write_attribute('PhasePosition', self.collect_phaseposition)
 
    def getBeamInfo(self, callback=None, error_callback=None):
       logging.info("AA1: getBeamInfo in MiniDiffPX1.py ")
@@ -247,7 +263,9 @@ class MiniDiffPX1(MiniDiff):
        return (None, None)
 
    def motor_positions_to_screen(self, centred_positions_dict):
+
        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+       logging.info("motor pos to screen. Y=%s / Z=%s / zoom=%s" % (self.pixelsPerMmY, self.pixelsPerMmZ, self.zoomMotor.getPosition()))
        phi_angle = math.radians(-self.phiMotor.getPosition()) #centred_positions_dict["phi"])
        #logging.info("CENTRED POS DICT = %r", centred_positions_dict)
        sampx = centred_positions_dict["sampx"]-self.sampleXMotor.getPosition()
@@ -384,7 +402,7 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
 
     t0 = time.time(); timeout = 5
 
-    while str( light.getWagoState()) != "INSERT":
+    while light.getWagoState() != "in":
       time.sleep(0.5)
       if (time.time() - t0) > timeout:
           raise Exception("SnapshotException","Timeout while inserting light")
@@ -392,8 +410,10 @@ def take_snapshots(light, light_motor, phi, zoom, drawing):
   for i in range(4):
      logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
      centredImages.append((phi.getPosition(),str(myimage(drawing))))
-     phi.syncMoveRelative(-90)
+     if i < 3:
+        phi.syncMoveRelative(-90)
      time.sleep(2)
+  #phi.syncMoveRelative(270)
 
   centredImages.reverse() # snapshot order must be according to positive rotation direction
 

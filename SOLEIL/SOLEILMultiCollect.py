@@ -382,7 +382,6 @@ class PixelDetector:
             self.shutterless_range = osc_range*number_of_images
             self.shutterless_exptime = (exptime + 0.003)*number_of_images
         self.execute_command("prepare_acquisition", take_dark, start, osc_range, exptime, npass, comment)
-        #self.getCommandObject("build_collect_seq").executeCommand("write_dp_inputs(COLLECT_SEQ,MXBCM_PARS)",wait=True)
         
     @task
     def set_detector_filenames(self, frame_number, start, filename, jpeg_full_path, jpeg_thumbnail_full_path):
@@ -611,17 +610,24 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
     def open_safety_shutter(self):
         logging.info("<SOLEIL MultiCollect> VERIFY - open safety shutter" )
         self.bl_control.safety_shutter.openShutter()
+
+        t0 = time.time()
         while self.bl_control.safety_shutter.getShutterState() == 'closed':
-          time.sleep(0.1)
+            time.sleep(0.1)
+            if (time.time() - t0) > 8:
+                logging.getLogger("user_level_log").error("Cannot open safety shutter. Please check before restarting data collection")
+                break
 
 
     @task
     def close_safety_shutter(self):
         logging.info("<SOLEIL MultiCollect> VERIFY - close safety shutter" )
         self.bl_control.safety_shutter.closeShutter()
+        t0 = time.time()
         while self.bl_control.safety_shutter.getShutterState() == 'opened':
           time.sleep(0.1)
-
+          if (time.time() - t0) > 6:
+                break
 
     @task
     def prepare_intensity_monitors(self):
@@ -631,7 +637,6 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def prepare_wedges_to_collect(self, start, nframes, osc_range, reference_interval, inverse_beam, overlap):
         return AbstractMultiCollect.prepare_wedges_to_collect(self, start, nframes, osc_range, reference_interval, inverse_beam, overlap)
-        # TOFILL self.prepareWedges(self, firstImage, nbFrames, ScanStartAngle)
 
     @task
     def prepare_acquisition(self, take_dark, start, osc_range, exptime, npass, number_of_images, comment=""):
@@ -754,19 +759,15 @@ class SOLEILMultiCollect(AbstractMultiCollect, HardwareObject):
     def get_beam_size(self):
         logging.info("<SOLEIL MultiCollect> TODO - get beam size " )
         return (None,None)
-        return (self.execute_command("get_beam_size_x"), self.execute_command("get_beam_size_y"))
-
 
     def get_slit_gaps(self):
         logging.info("<SOLEIL MultiCollect> TODO - get slit gaps" )
         return
-        return (self.execute_command("get_slit_gap_h"), self.execute_command("get_slit_gap_v"))
 
 
     def get_beam_shape(self):
         logging.info("<SOLEIL MultiCollect> TODO - get beam shape" )
         return
-        return self.execute_command("get_beam_shape")
     
     def get_measured_intensity(self):
       logging.info("<SOLEIL MultiCollect> TODO - get measured intensity " )

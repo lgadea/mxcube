@@ -110,7 +110,7 @@ class TangoShutter(BaseHardwareObjects.Device):
 
 
     def getShutterState(self):
-        print "getShutterState return :", TangoShutter.shutterState[str(self.shutterStateValue)].lower()
+        logging.getLogger().debug( "getShutterState return : %s" % TangoShutter.shutterState[str(self.shutterStateValue)].lower() )
         #print "                      self.shutterStateValue=", self.shutterStateValue
         #print 'getShutterState TangoShutter.shutterState[self.shutterStateValue].lower()', TangoShutter.shutterState[str(self.shutterStateValue)].lower()
         return TangoShutter.shutterState[str(self.shutterStateValue)].lower()

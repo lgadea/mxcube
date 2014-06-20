@@ -94,6 +94,9 @@ class BeamInfoPX1(Equipment):
                    logging.getLogger().info( str(self.positionTable) )
  
            self.connect(self.zoomMotor, 'predefinedPositionChanged', self.zoomPositionChanged)
+           pos = self.zoomMotor.getPosition()
+           posname = self.zoomMotor.getCurrentPositionName()
+           self.zoomPositionChanged( posname, pos)
         else:
            logging.getLogger().info("Zoom - motor is not good ")
 
