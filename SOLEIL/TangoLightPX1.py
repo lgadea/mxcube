@@ -1,4 +1,4 @@
-import logging
+import logging, time
 from qt import qApp
 from HardwareRepository.BaseHardwareObjects import Device
 
@@ -66,8 +66,14 @@ class TangoLightPX1(Device):
         if str(self.beamstopState.getValue()) == 'INSERT':
             logging.getLogger("HWR").info('TangoLightPX1. Extracting BeamStop.')
             self.beamstop_out()
+            t0 = time.time()
             while str(self.beamstopState.getValue()) != "EXTRACT":
+                time.sleep(0.02)
                 qApp.processEvents()
+                if (time.time() - t0) > 5:
+                    logging.getLogger("HWR").info('TangoLightPX1. Time out while trying to extract the beamstop.')
+                    return
+            logging.getLogger("HWR").info('TangoLightPX1. Time to extract the beamstop: %.2f sec.' % (time.time()-t0))
         detposition = self.detdistchan.getValue()
         logging.getLogger("HWR").info('TangoLightPX1. DetDist= %.2f mm. OK.' % detposition)
         if detposition < self.min_detector_distance:
