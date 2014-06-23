@@ -1,31 +1,22 @@
 # -*- coding: utf-8 -*-
-from qt import *
-from HardwareRepository.BaseHardwareObjects import Equipment
-import logging
-import PyChooch
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-#from SpecClient import SpecClientError
-#from SpecClient import SpecVariable
-#from SpecClient import SpecConnectionsManager
-#from SpecClient import SpecEventsDispatcher
-#from SimpleDevice2c import SimpleDevice #MS 05.03.2013
 import os
 import time
 import types
 import math
-from xabs_lib import *
-#from simple_scan_class import *
-import string
-#MS 05.03.2013
-from PyTango import DeviceProxy
-import numpy
+import logging
 import pickle
+
+import numpy
+from qt import *
+from PyTango import DeviceProxy
+from HardwareRepository.BaseHardwareObjects import Equipment
+from HardwareRepository import HardwareRepository
+import PyChooch
+from xabs_lib import *
 
 class EnergyScanPX1(Equipment):
     
     MANDATORY_HO={"BLEnergy":"BLEnergy"}
-    
     
     def init(self):
         self.scanning = None
@@ -40,14 +31,21 @@ class EnergyScanPX1(Equipment):
         self.nbsteps = 100 #
         self.integrationtime = 5.0
         self.directoryPrefix = None
+        self.currentEnergy = 0.
 
+	#   <directoryprefix>/session/file_info/base_directory</directoryprefix>
         self.directoryPrefix=self.getProperty("directoryprefix")
-        if self.directoryPrefix is None:
+	try:
+	    dir_pre = self.getProperty("directoryprefix")
+	    self.session_hobj = HardwareRepository.HardwareRepository().getHardwareObject(dir_pre)
+	except:
+	    pass
+        if self.session_hobj is None:
             logging.getLogger("HWR").error("EnergyScan: you must specify the directory prefix property")
         else :
+	    self.directoryPrefix = self.session_hobj.get_base_image_directory()
             logging.getLogger("HWR").info("EnergyScan: directoryPrefix : %s" %(self.directoryPrefix))
-            
-                    # Load mandatory hardware objects
+        	    
 #         for ho in EnergyScan.MANDATORY_HO:
 #             desc=EnergyScan.MANDATORY_HO[ho]
 #             name=self.getProperty(ho)
@@ -96,7 +94,6 @@ class EnergyScanPX1(Equipment):
             logging.getLogger("HWR").error("%s not found" %(self.getProperty("blenergy")))
             self.canScan = False
             
-        # Connect to device mono defined "tangoname2" in the xml file 
         # used for conversion in wavelength
         try :    
             self.monodevice = DeviceProxy(self.getProperty("mono")) #, verbose=False)
@@ -148,14 +145,7 @@ class EnergyScanPX1(Equipment):
         except :    
             logging.getLogger("HWR").error("%s not found" %(self.getProperty("attenuator")))
             self.canScan = False
-        
-#        try :    
-#            self.md2device = DeviceProxy(self.getProperty("md2")) #, verbose=False)
-#            self.md2device.timeout = 2000
-#        except :    
-#            logging.getLogger("HWR").error("%s not found" %(self.getProperty("md2")))
-#            self.canScan = False
-        
+                
         try:
             self.lightdevice = DeviceProxy(self.getProperty("lightextract")) #, verbose=False)
             self.lightdevice.timeout = 2000
@@ -516,7 +506,7 @@ class EnergyScanPX1(Equipment):
         self.scanThread.start()
 
     def getEdgefromXabs(self, el, edge):
-        edge = string.upper(edge)
+        edge = edge.upper()
         roi_center = McMaster[el]['edgeEnergies'][edge + '-alpha']
         if edge == 'L':
             edge = 'L3'
@@ -566,7 +556,7 @@ class EnergyScanPX1(Equipment):
                     logging.getLogger("HWR").error("%s: Cannot move undulator U20 : State device = %s", self.name(), self.U20Energydevice.State())
 
             try :
-                # Envoi a l'energie desiree    
+                # Envoi a l'energie desiree   
                 self.BLEnergydevice.energy = value
             except :           
                 logging.getLogger("HWR").error("%s: Cannot move BLEnergy : State device = %s", self.name(), self.BLEnergydevice.State())
@@ -584,6 +574,16 @@ class EnergyScanPX1(Equipment):
         logging.getLogger("HWR").debug('EnergyScan:getChoochValue')
         self.pk = pk
         self.ip = ip
+
+    def getCurrentEnergy(self):
+        logging.getLogger("HWR").debug('EnergyScanPX1: getCurrentEnergy')
+        if str(self.BLEnergydevice.State()) == "STANDBY":
+            self.currentEnergy = self.BLEnergydevice.energy
+            return self.currentEnergy
+        else:
+            logging.getLogger("HWR").warnin('EnergyScanPX1: Can not update energy.')
+            return self.currentEnergy
+            
 
 class EnergyScanThread(QThread):
     def __init__(self,
