@@ -229,7 +229,9 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
         self.collectServer = DeviceProxy( self.getProperty("collectname"))
         self.pilatusServer = DeviceProxy( self.getProperty("pilatusname"))
-
+        self.fluoMotor =     DeviceProxy( self.getProperty("fluomotor"))
+        self.close_safty_shutter = self.getProperty("close_safty_shutter") 
+        
         self.setControlObjects(diffractometer = self.getObjectByRole("diffractometer"),
                                sample_changer = self.getObjectByRole("sample_changer"),
                                lims = self.getObjectByRole("dbserver"),
@@ -398,19 +400,28 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     @task
     def close_safety_shutter(self):
-        self.bl_control.safety_shutter.closeShutter()
-        t0 = time.time()
-        while self.bl_control.safety_shutter.getShutterState() == 'opened':
-            time.sleep(0.1)
-            if (time.time() - t0) > 4:
-                logging.getLogger("HWR").error("Timeout on closing safety shutter")
-                break
+        logging.info("<PX1 MultiCollect> close_safety_shutter config: %s %s" % (self.close_safty_shutter, type(self.close_safty_shutter)))
+        if self.close_safty_shutter: 
+            logging.info("<PX1 MultiCollect> closing safetyshutter")
+	    self.bl_control.safety_shutter.closeShutter()
+            t0 = time.time()
+            while self.bl_control.safety_shutter.getShutterState() == 'opened':
+                time.sleep(0.1)
+                if (time.time() - t0) > 4:
+                    logging.getLogger("HWR").error("Timeout on closing safety shutter")
+                    break
 
     @task
     def prepare_intensity_monitors(self):
         logging.info("<PX1 MultiCollect> TODO - prepare intensity monitors")
 
     def prepare_acquisition(self, take_dark, start, osc_range, exptime, npass, number_of_images, comment=""):
+
+        try:
+            if str(self.fluoMotor.State()) == "INSERT":
+                self.fluoMotor.Extract()
+        except:
+            logging.error("<PX1 MultiCollect> Can't extract fluorescence arm")
 
         self.collectServer.exposurePeriod = exptime
         self.collectServer.numberOfImages = number_of_images
