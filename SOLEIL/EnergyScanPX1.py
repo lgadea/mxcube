@@ -5,20 +5,29 @@ import types
 import math
 import logging
 import pickle
+import gevent
 
 import numpy
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+
 from qt import *
 from PyTango import DeviceProxy
 from HardwareRepository.BaseHardwareObjects import Equipment
+from HardwareRepository.TaskUtils import *
 from HardwareRepository import HardwareRepository
 import PyChooch
 from xabs_lib import *
+
+
 
 class EnergyScanPX1(Equipment):
     
     MANDATORY_HO={"BLEnergy":"BLEnergy"}
     
     def init(self):
+        self.ready_event = gevent.event.Event()
         self.scanning = None
 #        self.moving = None
         self.scanThread = None
@@ -209,6 +218,9 @@ class EnergyScanPX1(Equipment):
                         prefix, 
                         session_id = None, 
                         blsample_id = None):
+
+        self._scan_edge    = edge
+        self._scan_element = element
         
         logging.getLogger("HWR").debug('EnergyScan:startEnergyScan')
         print 'edge', edge
@@ -241,6 +253,7 @@ class EnergyScanPX1(Equipment):
         logging.getLogger("HWR").debug('EnergyScan:cancelEnergyScan')
         if self.scanning:
             self.scanning = False
+            self.ready_event.set()
             
     def scanCommandReady(self):
         logging.getLogger("HWR").debug('EnergyScan:scanCommandReady')
@@ -265,23 +278,25 @@ class EnergyScanPX1(Equipment):
         self.scanning = False
         self.storeEnergyScan()
         self.emit('energyScanFailed', ())
+        self.ready_event.set()
         
     def scanCommandAborted(self):
         logging.getLogger("HWR").debug('EnergyScan:scanCommandAborted')
     
     def scanCommandFinished(self,result):
-        logging.getLogger("HWR").debug("EnergyScan: energy scan result is %s" % result)
-        self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
-        self.scanning = False
-        if result==-1:
-            self.storeEnergyScan()
-            self.emit('scanStatusChanged', ("Scan aborted",))
-            self.emit('energyScanFailed', ())
-            return
+        with cleanup(self.ready_event.set):
+            logging.getLogger("HWR").debug("EnergyScan: energy scan result is %s" % result)
+            self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
+            self.scanning = False
+            if result==-1:
+                self.storeEnergyScan()
+                self.emit('scanStatusChanged', ("Scan aborted",))
+                self.emit('energyScanFailed', ())
+                return
 
-        self.storeEnergyScan()
-        self.emit('energyScanFinished', (self.scanInfo,))
-        self.scanInfo=None
+            self.storeEnergyScan()
+            self.emit('energyScanFinished', (self.scanInfo,))
+            self.scanInfo=None
         
     def doChooch(self, scanObject, scanDesc):
                  #elt, 
@@ -362,7 +377,6 @@ class EnergyScanPX1(Equipment):
         ip = ip / 1000.0
         comm = ""
         logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge,  pk, ip, rm))
-
         if math.fabs(self.thEdge - ip) > 0.01:
             pk = 0
             ip = 0
@@ -371,6 +385,9 @@ class EnergyScanPX1(Equipment):
     
             logging.getLogger("HWR").warning('EnergyScan: calculated peak (%f) is more that 10eV %s the theoretical value (%f). Please check your scan and choose the energies manually' % (savpk, (self.thEdge - ip) > 0.01 and "below" or "above", self.thEdge))
         
+        #self.parent.pk = pk
+        #self.parent.ip = ip
+        #self.parent.rm = rm 
         scanFile = filenameIn
         archiveEfsFile = filenameOut #os.path.extsep.join((scanArchiveFilePrefix, "efs"))
         try:
