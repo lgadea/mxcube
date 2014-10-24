@@ -62,6 +62,9 @@ class TangoLightPX1(Device):
     def getWagoState(self):
         return self.currentState 
 
+    def getState(self):
+        return self.currentState 
+
     def wagoIn(self):
         if str(self.beamstopState.getValue()) == 'INSERT':
             logging.getLogger("HWR").info('TangoLightPX1. Extracting BeamStop.')

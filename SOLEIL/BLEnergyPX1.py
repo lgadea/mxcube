@@ -169,7 +169,7 @@ class BLEnergy (Device) :
             return None    
             
     def startMoveEnergy(self,value):   
-        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveEnergy: %.3f", self.name(), value)
+        #logging.getLogger("HWR").debug("%s: BLEnergy.startMoveEnergy: %.3f", self.name(), value)
     
         # MODIFICATION DE CETTE FONCTION POUR COMPENSER LE PROBLEME D'HYSTERESIS DE L"ONDULEUR
         # PAR CETTE METHODE ON APPLIQUE TOUJOURS UN GAP CROISSANT
@@ -215,13 +215,13 @@ class BLEnergy (Device) :
     
 
     def startMoveWavelength(self,value):
-        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %.3f", self.name(), value)
+        #logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %.3f", self.name(), value)
         self.monodevice.simLambda = value
         self.startMoveEnergy(self.monodevice.simEnergy)
 #        return self.startMoveEnergy(energy_val)
     
     def cancelMoveEnergy(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.cancelMoveEnergy", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.cancelMoveEnergy", self.name())
         self.BLEnergydevice.Stop()
         self.moving = False
             
@@ -238,33 +238,32 @@ class BLEnergy (Device) :
             self.emit('wavelengthLimitsChanged', (None,))
             
     def moveEnergyCmdReady(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdReady", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdReady", self.name())
         if not self.moving :
             self.emit('moveEnergyReady', (True,))
             
     def moveEnergyCmdNotReady(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdNotReady", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdNotReady", self.name())
         if not self.moving :
             self.emit('moveEnergyReady', (False,))
             
     def moveEnergyCmdStarted(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdStarted", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdStarted", self.name())
         self.moving = True
         self.emit('moveEnergyStarted',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
         
     def moveEnergyCmdFailed(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFailed", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFailed", self.name())
         self.moving = False
         self.emit('moveEnergyFailed', ())
         
     def moveEnergyCmdAborted(self):
         self.moving = False
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdAborted", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdAborted", self.name())
     
     def moveEnergyCmdFinished(self):
-        logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFinished", self.name())
+        #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFinished", self.name())
         self.moving = False
-        print 'moveEnergyFinished'
         self.emit('moveEnergyFinished',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
 
     def getPreviousResolution(self):

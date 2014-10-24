@@ -12,8 +12,13 @@ class TangoCryo(BaseHardwareObjects.Device):
         try:
             tempchan = self.getChannelObject('temperature')
             tempchan.connectSignal('update', self.temperatureChanged)
+            self.temp = tempchan.getValue()
             statuschan = self.getChannelObject('state')
             statuschan.connectSignal('update', self.stateChanged)
+            n2levelchan = self.getChannelObject('n2level')
+            n2levelchan.connectSignal('update', self.levelChanged)
+            self.n2level = n2levelchan.getValue()
+            logging.getLogger().debug('%s: connected to channels', self.name())
         except KeyError:
             logging.getLogger().warning('%s: cannot connect to channel', self.name())
 
@@ -22,7 +27,7 @@ class TangoCryo(BaseHardwareObjects.Device):
         #
         # emit signal
         #
-        #self.emit('valueChange', value)
+        self.temp = value
         self.emit('temperatureChanged', value)
 
 
@@ -30,5 +35,11 @@ class TangoCryo(BaseHardwareObjects.Device):
         #
         # emit signal
         #
-        #self.emit('valueChange', value)
         self.emit('cryoStatusChanged', value)
+
+    def levelChanged(self, value):
+        #
+        # emit signal
+        #
+        self.n2level = value
+        self.emit('levelChanged', value)

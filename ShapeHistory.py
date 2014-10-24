@@ -623,6 +623,7 @@ class Point(Shape):
         """
         qub_point = None
 
+        logging.debug("Drawing a point with Qub in drawing=%s " % str(self._drawing))
         try:
             qub_point, _ = QubAddDrawing(self._drawing, QubPointDrawingMgr, 
                                           QubCanvasTarget)

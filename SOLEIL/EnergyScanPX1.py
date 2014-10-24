@@ -2,9 +2,7 @@
 import os
 import time
 import types
-import math
 import logging
-import pickle
 import gevent
 
 import numpy
@@ -222,7 +220,7 @@ class EnergyScanPX1(Equipment):
         self._scan_edge    = edge
         self._scan_element = element
         
-        logging.getLogger("HWR").debug('EnergyScan:startEnergyScan')
+        #logging.getLogger("HWR").debug('EnergyScan:startEnergyScan')
         print 'edge', edge
         print 'element', element
         print 'directory', directory
@@ -377,7 +375,7 @@ class EnergyScanPX1(Equipment):
         ip = ip / 1000.0
         comm = ""
         logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge,  pk, ip, rm))
-        if math.fabs(self.thEdge - ip) > 0.01:
+        if abs(self.thEdge - ip) > 0.01:
             pk = 0
             ip = 0
             rm = self.thEdge + 0.05
@@ -531,12 +529,12 @@ class EnergyScanPX1(Equipment):
         return (e_edge, roi_center)    
         
     def newPoint(self, x, y):
-        logging.getLogger("HWR").debug('EnergyScan:newPoint')
+        #logging.getLogger("HWR").debug('EnergyScan:newPoint')
         print 'newPoint', x, y
         self.emit('addNewPoint', (x, y))
     
     def newScan(self,scanParameters):
-        logging.getLogger("HWR").debug('EnergyScan:newScan')
+        #logging.getLogger("HWR").debug('EnergyScan:newScan')
         self.emit('newScan', (scanParameters,))
         
     def startMoveEnergy(self, value):   # Copie du code ecrit dans BLEnergy.py pour gestion du backlash onduleur.
