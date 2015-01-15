@@ -12,7 +12,6 @@ from XfeCollect import XfeCollect
 class XfeSpectrumPX1(Equipment):
 
     def init(self):
-        logging.info('I am the XfeSpectrumPX1')
         self.scanning = None
         self.moving = None
 
@@ -81,13 +80,11 @@ class XfeSpectrumPX1(Equipment):
 
     # Energy spectrum commands
     def canSpectrum(self):
-        logging.info('XfeSpectrumPX1, canSpectrum, self.doSpectrum is %s' % self.doSpectrum)
         if not self.isConnected():
             return False
         return self.doSpectrum is not None
 
     def startXfeSpectrum(self, ct, directory, prefix, session_id=None, blsample_id=None):
-        logging.info("Xfepectrum: startXfeSpectrum")
         self.spectrumInfo = {"sessionId": session_id}
         self.spectrumInfo["blSampleId"] = blsample_id
         

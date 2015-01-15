@@ -30,6 +30,7 @@ class SampleChangerState:
     Fault       = 14
     Initializing= 15
     Closing     = 16
+    Off         = 17
 
     STATE_DESC = { Ready: "Ready",
                    Loaded:"Loaded",
@@ -46,7 +47,8 @@ class SampleChangerState:
                    ChangingMode:"Changing Mode",
                    StandBy:"StandBy",
                    Initializing:"Initializing",
-                   Closing:"Closing" }
+                   Closing:"Closing", 
+                   Off:"Off" }
 
     @staticmethod
     def tostring(state):
@@ -60,7 +62,7 @@ class SampleChangerMode:
     Unknown     = 0
     Normal      = 1
     Charging    = 8
-    Disabled    = 11
+    Disabled    = 12
 
 
 class SampleChanger(Container,Equipment):
@@ -146,7 +148,8 @@ class SampleChanger(Container,Equipment):
 ########################           EQUIPMENT           #######################
              
     def connectNotify(self, signal):
-        logging.getLogger().info ("connectNotify " + str(signal))
+        #logging.getLogger().info ("connectNotify " + str(signal))
+        pass
              
              
 #########################           PUBLIC           #########################             
@@ -341,7 +344,9 @@ class SampleChanger(Container,Equipment):
         return self._executeTask(SampleChangerState.Scanning,True,self._doScan,component, recursive)
                 
     def select(self, component, wait=True):
+        print "selecting a component"
         component = self._resolveComponent(component)
+        print " component is",str(component)
         ret =  self._executeTask(SampleChangerState.Selecting,wait,self._doSelect,component)
         self._triggerSelectionChangedEvent()        
         return ret

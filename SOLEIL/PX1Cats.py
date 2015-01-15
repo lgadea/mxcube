@@ -1,18 +1,27 @@
 """
-CATS sample changer hardware object.
+
+PX1Cats sample changer hardware object.
+
+Support for the CATS sample changer at SOLEIL PX1.  Using the 
+device server CryoTong by Patrick Gourhant
 
 Implements the abstract interface of the GenericSampleChanger for the CATS
 sample changer model.
-Derived from Alexandre Gobbo's implementation for the EMBL SC3 sample changer.
+
+This object includes both the SampleChanger interface and the Maintenance features 
+as initially developed by Michael Hellmig for BESSY beamlines
+
 """
+
+import logging
 from GenericSampleChanger import *
 import time
+import gevent
 
-__author__ = "Michael Hellmig"
+from HardwareRepository.TaskUtils import *
+
+__author__ = "Bixente Rey Bakaikoa"
 __credits__ = ["The MxCuBE collaboration"]
-
-__email__ = "michael.hellmig@helmholtz-berlin.de"
-__status__ = "Beta"
 
 class Pin(Sample):        
     STD_HOLDERLENGTH = 22.0
@@ -34,7 +43,7 @@ class Pin(Sample):
 
 class Basket(Container):
     __TYPE__ = "Puck"    
-    NO_OF_SAMPLES_PER_PUCK = 10
+    NO_OF_SAMPLES_PER_PUCK = 16
 
     def __init__(self,container,number):
         super(Basket, self).__init__(self.__TYPE__,container,Basket.getBasketAddress(number),True)
@@ -51,77 +60,73 @@ class Basket(Container):
         self.getContainer()._triggerInfoChangedEvent()
 
 
-class CatsPX1(SampleChanger):
+class PX1Cats(SampleChanger):
     """
     Actual implementation of the CATS Sample Changer,
     BESSY BL14.1 installation with 3 lids and 90 samples
     """    
     __TYPE__ = "CATS"    
-    NO_OF_LIDS    = 3
-    NO_OF_BASKETS = 9
+    NO_OF_LIDS    = 1
+    NO_OF_BASKETS = 3
+    TOOL = "1"   # CryoTong
 
     def __init__(self, *args, **kwargs):
-        super(CatsPX1, self).__init__(self.__TYPE__,False, *args, **kwargs)
+        super(PX1Cats, self).__init__(self.__TYPE__,False, *args, **kwargs)
             
     def init(self):      
         self._selected_sample = None
         self._selected_basket = None
-        self._scIsCharging = None
 
-        # add support for CATS dewars with variable number of lids
-        # assumption: each lid provides access to three baskets
-        self._propNoOfLids       = self.getProperty('no_of_lids')
-        self._propSamplesPerPuck = self.getProperty('samples_per_puck')
-        self._propHolderLength   = self.getProperty('holder_length')
+        self.task_started = 0
+        self.task_name = None
+        self.last_state_emit = 0
+
+        self._lidState = None
+        self._poweredState = None
+        self._toolState = None
+        self._safeNeeded = None
+        self._ln2regul = None
+        self._last_status = None
+        self._sc_state = None
+        self._global_state = None
 
         self.currentBasketDataMatrix = "this-is-not-a-matrix"
         self.currentSample = "this-is-not-a-sample"
         self.currentBasket = "this-is-not-a-basket"
 
-        if self._propNoOfLids is not None:
-            try:
-                CatsPX1.NO_OF_LIDS = int(self._propNoOfLids)
-            except ValueError:
-                pass
-            else:
-                CatsPX1.NO_OF_BASKETS = 3 * CatsPX1.NO_OF_LIDS
-
-        if self._propSamplesPerPuck is not None:
-            try:
-                Basket.NO_OF_SAMPLES_PER_PUCK = int(self._propSamplesPerPuck)
-            except ValueError:
-                pass
- 
-        if self._propHolderLength is not None:
-            try:
-                Pin.STD_HOLDERLENGTH = int(self._propHolderLength)
-            except ValueError:
-                pass
- 
-        
         # initialize the sample changer components, moved here from __init__ after allowing
         # variable number of lids
-        for i in range(CatsPX1.NO_OF_BASKETS):
+        for i in range(PX1Cats.NO_OF_BASKETS):
             basket = Basket(self,i+1)
             self._addComponent(basket)
 
-        for channel_name in ("_chnState", "_chnNumLoadedSample", "_chnLidLoadedSample", "_chnSampleBarcode", "_chnPathRunning", "_chnSampleIsDetected"):
+        for channel_name in ("_chnState", "_chnStatus", \
+                             "_chnLidState", "_chnPathRunning", \
+                             "_chnPowered", "_chnSafeNeeded", \
+                             "_chnToolOpen", "_chnLN2Regulation", \
+                             "_chnSoftAuth",  \
+                             "_chnPathRunning", "_chnMessage", \
+                             "_chnNumLoadedSample", "_chnLidLoadedSample", \
+                             "_chnSampleBarcode", "_chnSampleIsDetected"):
             setattr(self, channel_name, self.getChannelObject(channel_name))
            
-        for command_name in ("_cmdAbort", "_cmdLoad", "_cmdUnload", "_cmdChainedLoad"):
-            setattr(self, command_name, self.getCommandObject(command_name))
+        self._chnLidState.connectSignal("update", self._updateLidState)
+        self._chnPowered.connectSignal("update", self._updatePoweredState)
+        self._chnSafeNeeded.connectSignal("update", self._updateSafeNeeded)
+        self._chnLN2Regulation.connectSignal("update", self._updateRegulationState)
+        self._chnToolOpen.connectSignal("update", self._updateToolOpen) 
+        self._chnSoftAuth.connectSignal("update", self._softwareAuthorization) 
+        self._chnPathRunning.connectSignal("update", self._updateRunningState)
+        self._chnMessage.connectSignal("update", self._updateMessage)
 
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             channel_name = "_chnBasket%dState" % (basket_index + 1)
             setattr(self, channel_name, self.getChannelObject(channel_name))
 
-        self._lidStatus = self.getChannelObject("_chnTotalLidState")
-        if self._lidStatus is not None:
-            self._lidStatus.connectSignal("update", self._updateOperationMode)
-
-        self._softAutho = self.getChannelObject("softwareAuthorization")
-        if self._softAutho is not None:
-            self._softAutho.connectSignal("update", self._softwareAuthorization)
+        for command_name in ("_cmdAbort", "_cmdLoad", "_cmdUnload", "_cmdChainedLoad", \
+                             "_cmdReset", "_cmdSafe", "_cmdClearMemory", "_cmdPowerOn", "_cmdPowerOff", \
+                             "_cmdOpenLid", "_cmdCloseLid", "_cmdDrySoak", "_cmdSoak", "_cmdRegulOn", "_cmdRegulOff"):
+            setattr(self, command_name, self.getCommandObject(command_name))
 
         self._initSCContents()
 
@@ -142,6 +147,7 @@ class CatsPX1(SampleChanger):
 
     def getLoadedSampleDataMatrix(self):
         return "-not-a-matrix-"
+
     def _doUpdateInfo(self):       
         """
         Updates the sample changers status: mounted pucks, state, currently loaded sample
@@ -153,8 +159,17 @@ class CatsPX1(SampleChanger):
         # periodically updating the selection is not needed anymore, because each call to _doSelect
         # updates the selected component directly:
         # self._updateSelection()
+
         self._updateState()               
+        self._updateStatus()
+        self._updateLidState()
+        self._updatePoweredState()
+        self._updateSafeNeeded()
+        self._updateToolOpen()
         self._updateLoadedSample()
+        self._updateRegulationState()
+
+        self._updateGlobalState()
                     
     def _doChangeMode(self,mode):
         """
@@ -169,7 +184,7 @@ class CatsPX1(SampleChanger):
         basket = None
         sample = None
         try:
-          if basket_no is not None and basket_no>0 and basket_no <=CatsPX1.NO_OF_BASKETS:
+          if basket_no is not None and basket_no>0 and basket_no <=PX1Cats.NO_OF_BASKETS:
             basket = self.getComponentByAddress(Basket.getBasketAddress(basket_no))
             if sample_no is not None and sample_no>0 and sample_no <=Basket.NO_OF_SAMPLES_PER_PUCK:
                 sample = self.getComponentByAddress(Pin.getSampleAddress(basket_no, sample_no))            
@@ -201,17 +216,18 @@ class CatsPX1(SampleChanger):
         :returns: None
         :rtype: None
         """
+
         selected_basket = self.getSelectedComponent()
         if isinstance(component, Sample):            
             # scan a single sample
             if (selected_basket is None) or (selected_basket != component.getContainer()):
                 self._doSelect(component)            
             selected=self.getSelectedSample()            
-            # self._executeServerTask(self._scan_samples, [component.getIndex()+1,])
-            lid = ((selected.getBasketNo() - 1) / 3) + 1
-            sample = (((selected.getBasketNo() - 1) % 3) * 10) + selected.getVialNo()
-            argin = ["2", str(lid), str(sample), "0", "0"]
-            self._executeServerTask(self._cmdScanSample, argin)
+
+            lid, sample = self._getLidSampleFromSelected(selected) 
+            argin = [PX1Cats.TOOL, str(lid), str(sample), "0", "0"]
+
+            self._executeServerTask(self._cmdScanSample, "ScanSample", argin=argin)
             self._updateSampleBarcode(component)
         elif isinstance(component, Container) and ( component.getType() == Basket.__TYPE__):
             # component is a basket
@@ -223,14 +239,21 @@ class CatsPX1(SampleChanger):
                 # self._executeServerTask(self._scan_samples, (0,))                
                 selected=self.getSelectedSample()            
                 for sample_index in range(Basket.NO_OF_SAMPLES_PER_PUCK):
-                    lid = ((selected.getBasketNo() - 1) / 3) + 1
-                    sample = (((selected.getBasketNo() - 1) % 3) * 10) + (sample_index+1)
-                    argin = ["2", str(lid), str(sample), "0", "0"]
-                    self._executeServerTask(self._cmdScanSample, argin)
+                    lid, sample = self._getLidSampleFromSelected( selected, sample_index )
+                    argin = [PX1Cats.TOOL, str(lid), str(sample), "0", "0"]
+                    self._executeServerTask(self._cmdScanSample, "ScanSample", argin=argin)
         elif isinstance(component, Container) and ( component.getType() == SC3.__TYPE__):
             for basket in self.getComponents():
                 self._doScan(basket, True)
     
+    def _getLidSampleFromSelected(self,selected,sample_index=None):
+        lid = 1
+        if sample_index is None:
+            sample_index = selected.getVialNo()-1
+
+        sample = ((selected.getBasketNo() - 1)  * Basket.NO_OF_SAMPLES_PER_PUCK) + (sample_index+1)
+        return lid, sample
+
     def _doLoad(self,sample=None):
         """
         Loads a sample on the diffractometer. Performs a simple put operation if the diffractometer is empty, and 
@@ -251,17 +274,19 @@ class CatsPX1(SampleChanger):
                raise Exception("No sample selected")
 
         # calculate CATS specific lid/sample number
-        lid = ((selected.getBasketNo() - 1) / 3) + 1
-        sample = (((selected.getBasketNo() - 1) % 3) * 10) + selected.getVialNo()
-        argin = ["2", str(lid), str(sample), "0", "0", "0", "0", "0"]
+        lid, sample = self._getLidSampleFromSelected(selected)
+        argin = [PX1Cats.TOOL, str(lid), str(sample), "1", "0", "0", "0", "0"]
             
+        self._setState( SampleChangerState.Loading )
+
         if self.hasLoadedSample():
             if selected==self.getLoadedSample():
                 raise Exception("The sample " + str(self.getLoadedSample().getAddress()) + " is already loaded")
             else:
-                self._executeServerTask(self._cmdChainedLoad, argin)
+                print "Executing exchange. Argin is: %s" % str(argin)
+                self._executeServerTask(self._cmdChainedLoad, "Exchange", argin=argin)
         else:
-            self._executeServerTask(self._cmdLoad, argin)
+            self._executeServerTask(self._cmdLoad, "Load", argin=argin)
             
     def _doUnload(self,sample_slot=None):
         """
@@ -272,8 +297,11 @@ class CatsPX1(SampleChanger):
         """
         if (sample_slot is not None):
             self._doSelect(sample_slot)
-        argin = ["2", "0", "0", "0", "0"]
-        self._executeServerTask(self._cmdUnload, argin)
+
+        self._setState( SampleChangerState.Loading )
+
+        argin = [PX1Cats.TOOL, "0", "0", "0", "0"]
+        self._executeServerTask(self._cmdUnload, "Unload", argin=argin)
 
     def clearBasketInfo(self, basket):
         pass
@@ -289,27 +317,61 @@ class CatsPX1(SampleChanger):
         """
         self._cmdAbort()            
 
-    def _doReset(self):
-        pass
-
     #########################           PRIVATE           #########################        
-
-    def _updateOperationMode(self, value):
-        self._scIsCharging = not value
 
     def _softwareAuthorization(self, value):
         self.emit("softwareAuthorizationChanged", (value,))
 
-    def _executeServerTask(self, method, *args):
+    def _executeServerTask(self, method, taskname, states=None, argin=None, *args):
         """
         Executes a task on the CATS Tango device server
 
         :returns: None
         :rtype: None
         """
-        self._waitDeviceReady(3.0)
+
+        if states == None:
+            states = [SampleChangerState.Ready,]
+
+        self._waitDeviceState( states, 3.0 )
+        print " executing command, args are: %s" % str(argin)
+
+        if argin == None:
+           task_id = method()
+        else:
+           task_id = method(argin)
+
+        print "PX1Cats._executeServerTask", task_id
+        self.task_started = time.time()
+        self.task_name = taskname
+
+        ret=None
+        if task_id is None: #Reset
+            while self._isDeviceBusy():
+                gevent.sleep(0.1)
+        else:
+            # introduced 2 seconds wait because it takes some time before the moving state is reported 
+            # after launching a transfer
+            time.sleep(2.0)
+            self._waitDeviceState( [SampleChangerState.Moving,],  )
+            print "PX1Cats._executeServerTask. Done with waiting", task_id
+            ret = True
+        return ret
+
+    def _executeServerTask2(self, method, taskname, states=None, argin=None, *args):
+        """
+        Executes a task on the CATS Tango device server
+
+        :returns: None
+        :rtype: None
+        """
+        self._waitDeviceState( SampleChangerState.Ready, 3.0 )
         task_id = method(*args)
-        print "CatsPX1._executeServerTask", task_id
+
+        print "PX1Cats._executeServerTask", task_id
+        self.task_started = time.time()
+        self.task_name = taskname
+
         ret=None
         if task_id is None: #Reset
             while self._isDeviceBusy():
@@ -330,22 +392,22 @@ class CatsPX1(SampleChanger):
         :returns: None
         :rtype: None
         """
+
         try:
           state = self._readState()
         except:
+          import traceback
+          traceback.print_exc()
           state = SampleChangerState.Unknown
+
         if state == SampleChangerState.Moving and self._isDeviceBusy(self.getState()):
             return          
-        if self.hasLoadedSample() ^ self._chnSampleIsDetected.getValue():
-            # go to Unknown state if a sample is detected on the gonio but not registered in the internal database
-            # or registered but not on the gonio anymore
-            state = SampleChangerState.Unknown
-        elif self._chnPathRunning.getValue() and not (state in [SampleChangerState.Loading, SampleChangerState.Unloading]):
+
+        if self._chnPathRunning.getValue(): 
             state = SampleChangerState.Moving
-        elif self._scIsCharging and not (state in [SampleChangerState.Alarm, SampleChangerState.Moving, SampleChangerState.Loading, SampleChangerState.Unloading]):
-            state = SampleChangerState.Charging
+
         self._setState(state)
-       
+
     def _readState(self):
         """
         Read the state of the Tango DS and translate the state to the SampleChangerState Enum
@@ -353,17 +415,36 @@ class CatsPX1(SampleChanger):
         :returns: Sample changer state
         :rtype: GenericSampleChanger.SampleChangerState
         """
+
         state = self._chnState.getValue()
+
         if state is not None:
             stateStr = str(state).upper()
         else:
             stateStr = ""
-        #state = str(self._state.getValue() or "").upper()
+       
         state_converter = { "ALARM": SampleChangerState.Alarm,
                             "ON": SampleChangerState.Ready,
+                            "OFF": SampleChangerState.Off,
+                            "DISABLE": SampleChangerState.Unknown,
+                            "FAULT": SampleChangerState.Fault,
                             "RUNNING": SampleChangerState.Moving }
-        return state_converter.get(stateStr, SampleChangerState.Unknown)
+
+        sc_state = state_converter.get(stateStr, SampleChangerState.Unknown)
+        if sc_state == SampleChangerState.Ready:
+            if ( time.time() - self.task_started ) < 3.0:
+                sc_state = SampleChangerState.Moving
+
+        self._sc_state = sc_state
+        return sc_state
                         
+    def _updateStatus(self):
+        try:
+            status = self._chnStatus.getValue()
+            self._last_status = status
+        except:
+            pass
+       
     def _isDeviceBusy(self, state=None):
         """
         Checks whether Sample changer HO is busy.
@@ -373,8 +454,9 @@ class CatsPX1(SampleChanger):
         """
         if state is None:
             state = self._readState()
-        return state not in (SampleChangerState.Ready, SampleChangerState.Loaded, SampleChangerState.Alarm, 
-                             SampleChangerState.Disabled, SampleChangerState.Fault, SampleChangerState.StandBy)
+
+        return state not in (SampleChangerState.Ready, SampleChangerState.Alarm, SampleChangerState.Off,
+                             SampleChangerState.Fault, SampleChangerState.Unknown)
 
     def _isDeviceReady(self):
         """
@@ -384,7 +466,26 @@ class CatsPX1(SampleChanger):
         :rtype: Bool
         """
         state = self._readState()
-        return state in (SampleChangerState.Ready, SampleChangerState.Charging)              
+        return state in (SampleChangerState.Ready, )              
+
+    def _waitDeviceState(self,states,timeout=None):
+        """
+        Waits until the samle changer HO is ready.
+
+        :states: List of states to authorize start of task
+        :timeout: Maximum waiting time. If no timeout is given, wait forever
+        :returns: None
+        :rtype: None
+        """
+
+        with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
+            waiting = True
+            while not waiting:
+                state = self._readState()
+                if state in states:
+                    waiting = False
+                gevent.sleep(0.01)
+            
 
     def _waitDeviceReady(self,timeout=None):
         """
@@ -413,7 +514,7 @@ class CatsPX1(SampleChanger):
         # print "_updateSelection: saved selection: ", self._selected_basket, self._selected_sample
         try:
           basket_no = self._selected_basket
-          if basket_no is not None and basket_no>0 and basket_no <=CatsPX1.NO_OF_BASKETS:
+          if basket_no is not None and basket_no>0 and basket_no <=PX1Cats.NO_OF_BASKETS:
             basket = self.getComponentByAddress(Basket.getBasketAddress(basket_no))
             sample_no = self._selected_sample
             if sample_no is not None and sample_no>0 and sample_no <=Basket.NO_OF_SAMPLES_PER_PUCK:
@@ -438,10 +539,9 @@ class CatsPX1(SampleChanger):
         loadedSampleLid = self._chnLidLoadedSample.getValue()
         loadedSampleNum = self._chnNumLoadedSample.getValue()
         if loadedSampleLid != -1 or loadedSampleNum != -1:
-            lidBase = (loadedSampleLid - 1) * 3
-            lidOffset = ((loadedSampleNum - 1) / 10) + 1
-            samplePos = ((loadedSampleNum - 1) % 10) + 1
-            basket = lidBase + lidOffset
+            lidOffset = ((loadedSampleNum - 1) / Basket.NO_OF_SAMPLES_PER_PUCK) + 1
+            samplePos = ((loadedSampleNum - 1) % Basket.NO_OF_SAMPLES_PER_PUCK) + 1
+            basket = lidOffset
         else:
             basket = None
             samplePos = None
@@ -489,9 +589,9 @@ class CatsPX1(SampleChanger):
         :rtype: None
         """
         # create temporary list with default basket information
-        basket_list= [('', 4)] * CatsPX1.NO_OF_BASKETS
+        basket_list= [('', 4)] * PX1Cats.NO_OF_BASKETS
         # write the default basket information into permanent Basket objects 
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             basket=self.getComponents()[basket_index]
             datamatrix = None
             present = scanned = False
@@ -499,7 +599,7 @@ class CatsPX1(SampleChanger):
 
         # create temporary list with default sample information and indices
         sample_list=[]
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             for sample_index in range(Basket.NO_OF_SAMPLES_PER_PUCK):
                 sample_list.append(("", basket_index+1, sample_index+1, 1, Pin.STD_HOLDERLENGTH)) 
         # write the default sample information into permanent Pin objects 
@@ -521,7 +621,7 @@ class CatsPX1(SampleChanger):
         :returns: None
         :rtype: None
         """
-        for basket_index in range(CatsPX1.NO_OF_BASKETS):            
+        for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             # get presence information from the device server
             newBasketPresence = getattr(self, "_chnBasket%dState" % (basket_index + 1)).getValue()
             # get saved presence information from object's internal bookkeeping
@@ -556,4 +656,186 @@ class CatsPX1(SampleChanger):
                     # forget about any loaded state in newly mounted or removed basket)
                     loaded = has_been_loaded = False
                     sample._setLoaded(loaded, has_been_loaded)
+    
+    #----------------------------------------------------------------------------------------------------
+    #
+    # MAINTENANCE PART 
+    #
+    #----------------------------------------------------------------------------------------------------
+
+    ################################################################################
+
+    def safeTraj(self):    
+        """
+        Safely Moves the robot arm and the gripper to the home position
+        """    
+        return self._doSafe()     
+
+
+    def _doReset(self):
+        """
+        Launch the "reset" command on the CATS Tango DS
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdReset()
+
+    def _doClearMemory(self):
+        """
+        Launch the "ClearMemory" command on the CATS Tango DS
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdClearMemory()
+
+    def _doDrySoak(self):
+        """
+        Launch the "DrySoak" command on the CATS Tango DS
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdDrySoak()
+
+    def _doSafe(self):
+        """
+        Launch the "safe" trajectory on the CATS Tango DS
+
+        :returns: None
+        :rtype: None
+        """
+        self._executeServerTask(self._cmdSafe, "Safe", [SampleChangerState.Ready, SampleChangerState.Alarm])
+
+    def _doPowerState(self, state=False):
+        """
+        Switch on CATS power if >state< == True, power off otherwise
+
+        :returns: None
+        :rtype: None
+        """
+        if state:
+            self._cmdPowerOn()
+        else:
+            self._cmdPowerOff()
+
+    def _doEnableRegulation(self):
+        """
+        Switch on CATS regulation
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdRegulOn()
+
+    def _doHomeOpen(self):
+        """
+        Execute HomeOpen command on CATS
+
+        :returns: None
+        :rtype: None
+        """
+        self._executeServerTask(self._cmdHomeOpen, "HomeOpen")
+
+    def _doSoak(self):
+        """
+        Execute Soak command on CATS
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdSoak()
+
+    def _doLidState(self, state = True):
+        """
+        Opens lid if >state< == True, closes the lid otherwise
+
+        :returns: None
+        :rtype: None
+        """
+        if state:
+            self._executeServerTask(self._cmdOpenLid, "OpenLid")
+        else:
+            self._executeServerTask(self._cmdCloseLid, "CloseLid")
+           
+    def _doToolOpen(self, state=False):
+        """
+
+        Open/close CATS tool 
+
+        :returns: None
+        :rtype: None
+        """
+        if state:
+            self._chnToolOpen.setValue(True)
+        else:
+            self._chnToolOpen.setValue(False)
+
+    def _updateGlobalState(self):
+        """
+        At least every two seconds re-emit a list with state values as it seems
+        the brick is missing events
+        Device values are updated in previous calls.  See doUpdateInfo()
+        """  
+        now = time.time()  
+        global_state ={ 'SCstate': self._sc_state,
+                        'lidOpen': not self._lidState, 
+                        'safeNeeded': self._safeNeeded, 
+                        'powered': self._poweredState,
+                        'ln2regul': self._ln2regul,
+                        'toolOpen': self._toolState,
+                        'status': self._last_status } 
+
+        if global_state != self._global_state or (now - self.last_state_emit) > 1.0:
+              self.emit("stateValues", global_state)
+              self._global_state = global_state
+              self.last_state_emit = time.time()  
+
+    def _updateRunningState(self, value):
+        self.emit('runningStateChanged', (value, ))
+
+    def _updateMessage(self, value):
+        self.emit('messageChanged', (value, ))
+
+    def _updateRegulationState(self, value=None):
+        if value is None:
+             value = self._chnSafeNeeded.getValue()
+
+        if self._ln2regul != value:
+             self._ln2regul = value
+             self.emit('regulationStateChanged', (value, ))
+
+    def _updateSafeNeeded(self, value=None):
+        if value is None:
+             value = self._chnSafeNeeded.getValue()
+
+        if self._safeNeeded != value:
+             self._safeNeeded = value
+             self.emit('safeNeeded', (value, ))
+
+    def _updatePoweredState(self, value=None):
+        if value is None:
+             value = self._chnPowered.getValue()
+
+        if self._poweredState != value:
+             self._poweredState = value
+             self.emit('powerStateChanged', (value, ))
+
+    def _updateToolOpen(self, value=None):
+        if value is None:
+             value = self._chnToolOpen.getValue()
+
+        if self._toolState != value:
+             self._toolState = value
+             self.emit('toolOpenChanged', (value, ))
+
+    def _updateLidState(self, value=None):
+        if value is None:
+            value = self._chnLidState.getValue()
+
+        if value != self._lidState:
+            self._lidState = value
+            self.emit('lidStateChanged', (not value, ))
+
 

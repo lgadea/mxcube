@@ -628,10 +628,13 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def get_archive_directory(self, directory):
         res = None
        
-        logging.getLogger().info("<PX1 MultiCollect> TODO - get archive directory (using /tmp for now)")
-        return "/tmp"
+        archive_dir = directory.replace("RAW_DATA","ARCHIVE")
+
+        logging.getLogger().info("<PX1 MultiCollect> - get archive directory (using %s)" % archive_dir)
+        return archive_dir 
 
         dir_path_list = directory.split(os.path.sep)
+         
         try:
           suffix_path=os.path.join(*dir_path_list[4:])
         except TypeError:

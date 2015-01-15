@@ -38,24 +38,21 @@ class Ps_attenuatorPX1(Device):
                          
 
     def getAttState(self):
-        logging.getLogger().info("HOS Attenuator: passe dans getAttState")
+        # logging.getLogger().info("HOS Attenuator: passe dans getAttState")
         try:
             value= Ps_attenuatorPX1.stateAttenuator[self.Attenuatordevice.State().name]
-            print 'State Ps_Attenuator : ' , Ps_attenuatorPX1.stateAttenuator[self.Attenuatordevice.State().name]
-            logging.getLogger().debug("Attenuator state read from the device %s",value)
         except:
-            logging.getLogger("HWR").error('%s getAttState : received value on channel is not a integer value', str(self.name()))
             value=None
         return value
     
     def attStateChanged(self, channelValue):
-        logging.getLogger().info("HOS Attenuator: passe dans attStateChanged")
+        # logging.getLogger().info("HOS Attenuator: passe dans attStateChanged")
         value = self.getAttState()
         self.emit('attStateChanged', (value, ))
 
 
     def getAttFactor(self):
-        logging.getLogger().info("HOS Attenuator: passe dans getAttFactor")
+        # logging.getLogger().info("HOS Attenuator: passe dans getAttFactor")
         
         try:
 #            if self.Attenuatordevice.TrueTrans_FP  <= 100.0 :
@@ -81,7 +78,6 @@ class Ps_attenuatorPX1(Device):
 
     def attFactorChanged(self, channelValue):
         try:
-            print "Dans attFactorChanged channelValue = %f"  %channelValue
 #  	    value = float(channelValue)
             value = self.getAttFactor()
         except:
@@ -100,7 +96,7 @@ class Ps_attenuatorPX1(Device):
             self.emit('toggleFilter', (value, )) 
             
     def setTransmission(self,value) :
-        logging.getLogger().debug("HOS Attenuator: passe dans setTransmission")       
+        # logging.getLogger().debug("HOS Attenuator: passe dans setTransmission")       
         try:
             self.Attenuatordevice.TrueTrans_FP = value
         except:
@@ -109,7 +105,7 @@ class Ps_attenuatorPX1(Device):
         return value
         
     def toggle(self,value) :
-        logging.getLogger().debug("HOS Attenuator: passe dans toggle")
+        # logging.getLogger().debug("HOS Attenuator: passe dans toggle")
         return value
                           
             

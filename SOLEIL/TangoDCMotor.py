@@ -47,7 +47,7 @@ class TangoDCMotor(Device):
 
         try:
             self.dataType    = self.getProperty("datatype")
-            logging.getLogger("HWR").info("TangoDCMotor dataType found in config, it is %s", self.dataType)
+            #logging.getLogger("HWR").info("TangoDCMotor dataType found in config, it is %s", self.dataType)
         except:
             self.dataType    = "float"
 
@@ -69,7 +69,6 @@ class TangoDCMotor(Device):
         self.positionValue = value
         if abs(value - self.old_value ) > self.threshold:
             try:
-                logging.getLogger("HWR").error("%s: TangoDCMotor new position  , %s", self.name(), value)
                 self.emit('positionChanged', (value,))
                 self.old_value = value
             except:
@@ -94,7 +93,6 @@ class TangoDCMotor(Device):
     def motorStateChanged(self, state):
         self.stateValue = str(state)
         self.setIsReady(True)
-        logging.info("motor state changed. it is %s " % self.stateValue)
         self.emit('stateChanged', (TangoDCMotor.stateDict[self.stateValue], ))
         
     def getState(self):
@@ -106,10 +104,8 @@ class TangoDCMotor(Device):
             info = self.positionChan.getInfo() 
             max = float(info.max_value)
             min = float(info.min_value)
-            logging.getLogger("HWR").info("TangoDCMotor.getLimits: %.4f %.4f" % (min,max))
             return [min,max]
         except:
-            logging.getLogger("HWR").info("TangoDCMotor.getLimits: Cannot get limits for %s" % self.name())
             return [-1,1]
         
     def motorLimitsChanged(self):

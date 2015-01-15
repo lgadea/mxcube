@@ -104,6 +104,8 @@ class MiniDiffPX1(MiniDiff):
 
    def __init__(self,*args):
        MiniDiff.__init__(self, *args)
+       self.calib_x = None
+       self.calib_y = None
    
    def init(self,*args):
        MiniDiff.init(self, *args)
@@ -113,7 +115,6 @@ class MiniDiffPX1(MiniDiff):
 
        bs_prop=self.getProperty("bstop")
        self.bstop_ho = None
-       logging.getLogger().info("MiniDiffPX1.  Loading %s as beamstop " % str(bs_prop))
 
        if bs_prop is not None:
             try:
@@ -130,7 +131,7 @@ class MiniDiffPX1(MiniDiff):
        self.obx = self.getDeviceByRole('obx')
 
        if self.sampleChanger is not None:
-            self.scAuthChan = self.sampleChanger.getChannelObject("softwareAuthorization")
+            self.scAuthChan = self.sampleChanger.getChannelObject("_chnSoftAuth")
             self.scAuthChan.connectSignal("update", self.SCauthorizationChanged )
             logging.getLogger().info("MiniDiffPX1. Connection to authorization signal done")
                     #self.connect(self.samplechanger, "gonioMovementAuthorized", self.SCauthorizationChanged )

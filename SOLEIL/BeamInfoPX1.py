@@ -83,15 +83,10 @@ class BeamInfoPX1(Equipment):
         self.zoomMotor = self.getDeviceByRole("zoom")
 
         if self.zoomMotor is not None:
-           logging.getLogger().info("Zoom - motor is good ")
            if self.zoomMotor.hasObject('positions'):
-               logging.getLogger().info("Zoom - has positions ")
                for position in self.zoomMotor['positions']:
-                   logging.getLogger().info("   - position " + str(position))
                    calibrationData = position['calibrationData']
                    self.positionTable[str(position.offset)] = [ float(calibrationData.beamPositionX), float(calibrationData.beamPositionY) ]
-                   logging.getLogger().info("Zoom - beam position table loaded")
-                   logging.getLogger().info( str(self.positionTable) )
  
            self.connect(self.zoomMotor, 'predefinedPositionChanged', self.zoomPositionChanged)
            pos = self.zoomMotor.getPosition()
@@ -114,25 +109,19 @@ class BeamInfoPX1(Equipment):
         #    self.sizeUpdated() 
 
     def beamPosXChanged(self, value):
-        logging.getLogger().info('beamPosX changed. It is %s ' % value)
         #self.beam_position[0] = value
         self.positionUpdated() 
 
     def beamPosYChanged(self, value):
-        logging.getLogger().info('beamPosY changed. It is %s ' % value)
         #self.beam_position[1] = value
         self.positionUpdated() 
 
     def zoomPositionChanged(self, name, offset):
-        logging.getLogger().info('zoom position changed. It is %s / offset=%s ' % (name,offset))
         try:
            offs = str( int(offset) )
-           logging.getLogger().info('looking for  offset %s in table. ' % offs)
-           logging.getLogger().info(str(self.positionTable))
            if offs in self.positionTable:
               pos = self.positionTable[offs]
               self.beam_position[0], self.beam_position[1] = float(pos[0]), float(pos[1])
-              logging.getLogger().info('found %s' % str(self.beam_position))
               self.positionUpdated() 
            else:
               logging.getLogger().info('not found')

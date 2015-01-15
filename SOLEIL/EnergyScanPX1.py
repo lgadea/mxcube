@@ -40,6 +40,8 @@ class EnergyScanPX1(Equipment):
         self.directoryPrefix = None
         self.currentEnergy = 0.
 
+        self.BLEnergydevice = None
+
 	#   <directoryprefix>/session/file_info/base_directory</directoryprefix>
         self.directoryPrefix=self.getProperty("directoryprefix")
 	try:
@@ -53,6 +55,10 @@ class EnergyScanPX1(Equipment):
 	    self.directoryPrefix = self.session_hobj.get_base_image_directory()
             logging.getLogger("HWR").info("EnergyScan: directoryPrefix : %s" %(self.directoryPrefix))
         	    
+        if self.BLEnergydevice is None:
+            self.BLEnergydevice = DeviceProxy(self.getProperty("blenergy")) #, verbose=False)
+            self.BLEnergydevice.waitMoves = True
+            self.BLEnergydevice.timeout = 30000
 #         for ho in EnergyScan.MANDATORY_HO:
 #             desc=EnergyScan.MANDATORY_HO[ho]
 #             name=self.getProperty(ho)
@@ -91,12 +97,18 @@ class EnergyScanPX1(Equipment):
 
         if self.isSpecConnected():
             self.sConnected()
-            
-    def connectTangoDevices(self):
-        try :
+
+        if self.BLEnergydevice is None:
             self.BLEnergydevice = DeviceProxy(self.getProperty("blenergy")) #, verbose=False)
             self.BLEnergydevice.waitMoves = True
             self.BLEnergydevice.timeout = 30000
+            
+    def connectTangoDevices(self):
+        try :
+            if self.BLEnergydevice is None:
+                self.BLEnergydevice = DeviceProxy(self.getProperty("blenergy")) #, verbose=False)
+                self.BLEnergydevice.waitMoves = True
+                self.BLEnergydevice.timeout = 30000
         except :
             logging.getLogger("HWR").error("%s not found" %(self.getProperty("blenergy")))
             self.canScan = False
@@ -591,13 +603,26 @@ class EnergyScanPX1(Equipment):
         self.ip = ip
 
     def getCurrentEnergy(self):
-        logging.getLogger("HWR").debug('EnergyScanPX1: getCurrentEnergy')
-        if str(self.BLEnergydevice.State()) == "STANDBY":
-            self.currentEnergy = self.BLEnergydevice.energy
-            return self.currentEnergy
-        else:
-            logging.getLogger("HWR").warnin('EnergyScanPX1: Can not update energy.')
-            return self.currentEnergy
+        try:
+            #if str(self.BLEnergydevice.State()) == "STANDBY":
+                self.currentEnergy = self.BLEnergydevice.energy
+                logging.getLogger("HWR").debug('EnergyScanPX1: getCurrentEnergy is "%s" ' % str(self.currentEnergy))
+                return self.currentEnergy
+            #else:
+                #logging.getLogger("HWR").warning('EnergyScanPX1: Can not update energy.')
+                #return self.currentEnergy
+        except:
+            import traceback
+            logging.getLogger("HWR").warning('EnergyScanPX1: Error getting energy. %s' % traceback.format_exc())
+            return -1
+
+    def getCurrentWavelength(self):
+        logging.getLogger("HWR").info("Get current wavelength")
+        current_en = self.getCurrentEnergy()
+        if current_en is not None:
+            return (12.3984/current_en)
+        return None
+
             
 
 class EnergyScanThread(QThread):
