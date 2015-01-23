@@ -1,15 +1,21 @@
+from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import HardwareObject
 from AbstractMultiCollect import *
 from gevent.event import AsyncResult
 import logging
 import time
-import os, copy
+import os
+import copy
+import math
 import httplib
+import subprocess
+import socket
 
 from PyTango import DeviceProxy
+from collections import namedtuple
 
 class TunableEnergy:
-    # self.bl_control is passed by ESRFMultiCollect
+    # self.bl_control is passed by PX1MultiCollect
     @task
     def set_wavelength(self, wavelength):
         energy_obj = self.bl_control.energy
@@ -30,6 +36,8 @@ class PixelDetector:
     def __init__(self):
         self.shutterless = True
         self.new_acquisition = True
+        self.first_frame = True
+        self.jpeg_allframes = False
         self.shutterless_exptime = None
         self.shutterless_range = None
 
@@ -88,6 +96,11 @@ class PixelDetector:
 
     @task
     def set_detector_filenames(self, frame_number, start, filename, jpeg_full_path, jpeg_thumbnail_full_path):
+
+      self.current_jpeg_path = jpeg_full_path
+      self.current_thumb_path = jpeg_thumbnail_full_path
+      self.current_filename = filename
+
       if self.shutterless and not self.new_acquisition:
           return
 
@@ -105,6 +118,8 @@ class PixelDetector:
 
       self.collectServer.imageName = basefile
       self.collectServer.imagePath = dirname
+      self.collectServer.jpegpath = jpeg_full_path
+      self.collectServer.jpegthumb = jpeg_thumbnail_full_path
       self.collectServer.PrepareCollect()
 
       #self.collectServer.imageName = "%s_%d_%04d.%s" % ( \
@@ -154,6 +169,7 @@ class PixelDetector:
           
               # make oscillation an asynchronous task => do not wait here
               logging.info("<PX1 MultiCollect> TODO - do oscillation new")
+              self.first_frame = True
               self.collectServer.Start()
               self.new_acquisition = False
               logging.getLogger("user_level_log").info("<PX1 MultiCollect> Collect server started waiting for first image")
@@ -162,10 +178,11 @@ class PixelDetector:
               self.wait_nextimage()
   
           # wait for image number to change
+          logging.info("<PX1 MultiCollect> TODO - do oscillation not new")
           self.wait_nextimage()
 
       else:
-          logging.info("<PX1 MultiCollect> TODO - do oscillation not new")
+          logging.info("<PX1 MultiCollect> TODO - not shutterless mode. Nothing done here")
     
     def wait_nextimage(self):
         cimg = self.cimg
@@ -175,15 +192,43 @@ class PixelDetector:
            time.sleep(0.02)
            cimg = self.collectServer.currentImageSpi
         self.cimg = cimg
-        logging.getLogger("user_level_log").info("<PX1 MultiCollect> end waiting for image number %s" % str(self.cimg))
+        if self.cimg != 0:
+            logging.getLogger("user_level_log").info("<PX1 MultiCollect> end waiting for image number %s" % str(self.cimg))
 
     @task
     def write_image(self, last_frame):
-      if last_frame:
-        if self.shutterless:
+        if self.jpeg_allframes or self.first_frame or last_frame:
             logging.info("<PX1 MultiCollect> TODO - write image ")
-            #self.execute_command("specific_collect_frame_hook")
+            logging.info("Generating jpeg and thumbnail for:")
+            logging.info("   - Fullpath :  " + self.current_filename)
+            logging.info("   - jpegpath :  " + self.current_jpeg_path )
+            logging.info("   - thumpath :  " + self.current_thumb_path )
+      
+            subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_jpeg_path, '0.4' ])
+            subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_thumb_path, '0.1' ])
 
+            self.first_frame = False
+
+        self.adxv_sync(self.current_filename)
+
+    def adxv_sync(self, imgname):
+        # connect to adxv to show the image
+        adxv_send_fmt = "\nload_image %s" + "\n"+ chr(32)
+        logging.info(" ADXV_send_fmt")
+        logging.info(adxv_send_fmt % "toto")
+        
+        try:
+            if not self.adxv_socket:
+                try:
+                    self.connectVisualisation()
+                except:
+                    logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
+            else:
+                print "dxv_send_fmt % self.current_filename"
+                self.adxv_socket.send(adxv_send_fmt % self.current_filename)
+        except:
+            pass
+      
     def stop_acquisition(self):
         logging.info("<PX1 MultiCollect>  stopping acquisition ")
         self.new_acquisition = False
@@ -197,16 +242,18 @@ class PixelDetector:
       #self.execute_command("reset_detector")
 
     #TODO: rename to stop_collect
+
     def stopCollect(self, owner):
         logging.info("<PX1 MultiCollect>  stopping ")
         if str( self.collectServer.State()) == "RUNNING":
            logging.info("<PX1 MultiCollect>  stopping collect server ")
            self.collectServer.Stop()
-        AbstractMultiCollect.stopCollect(self,owner)
 
 
 class PilatusDetector(PixelDetector):
     pass
+
+PX1BeamlineConfig = namedtuple('PX1BeamlineConfig', BeamlineConfig._fields+('detector_radius', 'synchrotron_name',))
 
 class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def __init__(self, name):
@@ -217,7 +264,6 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         self._detector = PilatusDetector()
         self._tunable_bl = TunableEnergy()
 
-
         self._centring_status = None
 
     def execute_command(self, command_name, *args, **kwargs): 
@@ -225,6 +271,13 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
       cmd_obj = self.getCommandObject(command_name)
       return cmd_obj(*args, wait=wait)
           
+    def setBeamlineConfiguration(self, **configuration_parameters):
+        self.bl_config = PX1BeamlineConfig(**configuration_parameters)
+
+    def set_rotation_axis(self, axis):
+        logging.debug("PX1 multicollect. rotation axis set to : %s" % axis)
+        self.collectServer.collectAxis = axis
+
     def init(self):
 
         self.collectServer = DeviceProxy( self.getProperty("collectname"))
@@ -232,6 +285,15 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         self.fluoMotor =     DeviceProxy( self.getProperty("fluomotor"))
         self.close_safty_shutter = self.getProperty("close_safty_shutter") 
         
+        self.collectServer.collectAxis = "Phi"
+
+        self.imgtojpeg = self.getProperty("imgtojpeg")
+        self._detector.imgtojpeg = self.imgtojpeg
+        self.jpegoption = self.getProperty("jpegoption")
+        if self.jpegoption == 'allframes':
+            self._detector.jpeg_allframes = True
+        self.ruche_sync_dir = self.getProperty("ruche_sync_dir")
+    
         self.setControlObjects(diffractometer = self.getObjectByRole("diffractometer"),
                                sample_changer = self.getObjectByRole("sample_changer"),
                                lims = self.getObjectByRole("dbserver"),
@@ -253,12 +315,18 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
         bcm_pars = mxlocalHO["BCM_PARS"]
         spec_pars = mxlocalHO["SPEC_PARS"]
+        bl_pars = mxlocalHO["BEAMLINE_PARS"]
+
+        self.session_hwo = self.getObjectByRole("session")
 
         try:
           undulators = bcm_pars["undulator"]
         except IndexError:
           undulators = []
-
+    
+        # PL 2015_01_23 For ADXV visualisation.
+        self.connectVisualisation()
+        
         self.setBeamlineConfiguration(directory_prefix = self.getProperty("directory_prefix"),
                                       default_exposure_time = bcm_pars.getProperty("default_exposure_time"),
                                       default_number_of_passes = bcm_pars.getProperty("default_number_of_passes"),
@@ -271,10 +339,11 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
                                       detector_fileext = bcm_pars.getProperty("FileSuffix"),
                                       detector_type = bcm_pars["detector"].getProperty("type"),
                                       detector_mode = spec_pars["detector"].getProperty("binning"),
-                                      detector_manufacturer = bcm_pars["detector"].getProperty("manufacturer"),
-                                      detector_model = bcm_pars["detector"].getProperty("model"),
-                                      detector_px = bcm_pars["detector"].getProperty("px"),
-                                      detector_py = bcm_pars["detector"].getProperty("py"),
+                                      detector_manufacturer = bcm_pars.getProperty("detector_manufacturer"),
+                                      detector_model = bcm_pars.getProperty("detector_model"),
+                                      detector_px = bcm_pars.getProperty("detector_px"),
+                                      detector_py = bcm_pars.getProperty("detector_py"),
+                                      detector_radius = bcm_pars.getProperty('detector_radius'),
                                       beam_ax = spec_pars["beam"].getProperty("ax"),
                                       beam_ay = spec_pars["beam"].getProperty("ay"),
                                       beam_bx = spec_pars["beam"].getProperty("bx"),
@@ -286,6 +355,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
                                       beam_divergence_horizontal = bcm_pars.getProperty('beam_divergence_horizontal'),     
                                       polarisation = bcm_pars.getProperty('polarisation'),
                                       auto_processing_server = None,
+                                      synchrotron_name = bl_pars.getProperty('synchrotron_name'),
                                       input_files_server = None)
   
         self.oscaxis = self.getProperty("oscaxis")
@@ -341,6 +411,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def data_collection_cleanup(self):
         self.close_fast_shutter()
+        self.trigger_data_sync()
 
     @task
     def close_fast_shutter(self):
@@ -435,6 +506,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return self._detector.prepare_acquisition(take_dark, start, osc_range, exptime, npass, number_of_images, comment)
 
     def set_detector_filenames(self, frame_number, start, filename, jpeg_full_path, jpeg_thumbnail_full_path):
+        self.current_jpeg_full_path = jpeg_full_path
         return self._detector.set_detector_filenames(frame_number, start, filename, jpeg_full_path, jpeg_thumbnail_full_path)
 
     def prepare_oscillation(self, start, osc_range, exptime, npass):
@@ -458,6 +530,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return
 
     def reset_detector(self):
+        AbstractMultiCollect.stopCollect(self,owner=None)
         return self._detector.reset_detector()
 
     def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
@@ -472,7 +545,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
       
     def get_detector_distance(self):
         logging.info("<PX1 MultiCollect> TODO - get detector distance")
-        return
+        return self.bl_control.detector_distance.getPosition()
        
     def get_resolution(self):
         return self.bl_control.resolution.getPosition()
@@ -481,12 +554,16 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return self.bl_control.transmission.getAttFactor()
 
     def get_undulators_gaps(self):
+        logging.info("<PX1 MultiCollect> TODO - get undulators gaps" )
+        return ['9999','9999']
+
         all_gaps = {'Unknown': None}
         try:
             _gaps = self.bl_control.undulators.getUndulatorGaps()
         except:
             logging.getLogger("HWR").exception("Could not get undulator gaps")
         all_gaps.clear()
+
         for key in _gaps:
             if  '_Position' in key:
                 nkey = key[:-9]
@@ -496,58 +573,71 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return all_gaps
 
     def get_resolution_at_corner(self):
-        logging.info("<PX2 MultiCollect> TODO - get resolution at corner" )
-        return
+
+        logging.info("<PX1 MultiCollect> get resolution at corner" )
+
+        radius = self.bl_config.detector_radius  / 1000.0 # meters
+        detdist =  self.get_detector_distance() / 1000.0 # meters
+        wavelength = self.get_wavelength() # amstrongs
+
+        angle = math.atan( math.sqrt(2)*radius/detdist) 
+        resatcorner = wavelength / (2*math.sin(0.5*angle))
+        return resatcorner
 
     def get_beam_size(self):
-        logging.info("<PX2 MultiCollect> TODO - get beam size" )
-        return (None,None)
+        logging.info("<PX1 MultiCollect> TODO - get beam size" )
+        return (-1,-1)
 
     def get_slit_gaps(self):
-        logging.info("<PX2 MultiCollect> TODO - get slit gaps" )
-        return 
+        logging.info("<PX1 MultiCollect> TODO - get slit gaps" )
+        return (-1,-1)
 
     def get_beam_shape(self):
-        logging.info("<PX2 MultiCollect> TODO - get beam shape" )
-        return 
+        logging.info("<PX1 MultiCollect> TODO - get beam shape" )
+        return "rectangular"
     
     def get_measured_intensity(self):
-        logging.info("<PX2 MultiCollect> TODO - get measured intensity" )
+        logging.info("<PX1 MultiCollect> TODO - get measured intensity" )
         try:
            val = self.getChannelObject("image_intensity").getValue()
            return float(val)
         except:
-           return 0
+           return -1
 
     def get_machine_current(self):
-        if self.bl_control.machine_current:
+        if self.bl_control.machine_current is not None:
             return self.bl_control.machine_current.getCurrent()
         else:
-            return 0
+            return -1
 
     def get_machine_message(self):
-        if  self.bl_control.machine_current:
+        logging.info("<PX1 MultiCollect> getting machine message" )
+        if  self.bl_control.machine_current is not None:
             return self.bl_control.machine_current.getMessage()
         else:
-            return ''
+            return 'Not implemented yet'
 
     def get_machine_fill_mode(self):
-        if self.bl_control.machine_current:
+        logging.info("<PX1 MultiCollect> getting machine fill mode" )
+        logging.info( self.bl_control.machine_current.getFillMode() )
+
+        if self.bl_control.machine_current is not None:
             return self.bl_control.machine_current.getFillMode()
         else:
-            ''
+            'Not implemented yet'
 
     def get_cryo_temperature(self):
-        logging.info("<PX2 MultiCollect> TODO - get cryo temperature" )
-        return
+        logging.info("<PX1 MultiCollect> TODO - get cryo temperature" )
+        return -1 
         #return self.bl_control.cryo_stream.getTemperature()
 
     def getCurrentEnergy(self):
         return self._tunable_bl.getCurrentEnergy()
 
     def get_beam_centre(self):
-        logging.info("<PX2 MultiCollect> TODO - get beam centre" )
-        return
+        logging.info("<PX1 MultiCollect> TODO - get beam centre" )
+        return (999,999)
+
         #return (self.execute_command("get_beam_centre_x"), self.execute_command("get_beam_centre_y"))
     
     def getBeamlineConfiguration(self, *args):
@@ -579,8 +669,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return self.bl_config.directory_prefix
 
     def store_image_in_lims(self, frame, first_frame, last_frame):
-        if isinstance(self._detector, CcdDetector):
-            return True
+        #if isinstance(self._detector, CcdDetector):
+            #return True
 
         if isinstance(self._detector, PixelDetector):
             if first_frame or last_frame:
@@ -588,8 +678,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def get_flux(self):
         logging.info("<PX1 MultiCollect> TODO - get flux")
-        return 10e12
-        #return self.bl_control.flux.getCurrentFlux()
+        return self.bl_control.flux.getCurrentFlux()
 
     """
     getOscillation
@@ -629,22 +718,61 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         res = None
        
         archive_dir = directory.replace("RAW_DATA","ARCHIVE")
-
         logging.getLogger().info("<PX1 MultiCollect> - get archive directory (using %s)" % archive_dir)
+
         return archive_dir 
 
-        dir_path_list = directory.split(os.path.sep)
-         
+    def trigger_data_sync(self):
+        logging.getLogger().info("<PX1 MultiCollect> - triggering data sync ")
+        ruche_info = self.session_hwo.get_ruche_info( self.current_jpeg_full_path ) 
+
+        sync_file = time.strftime("%Y_%m_%d-%H_%M_%S", time.localtime(time.time()))
+        sync_file_path = os.path.join( self.ruche_sync_dir, sync_file )
+        open(sync_file_path,"w").write( ruche_info )
+
+    def connectVisualisation(self):
+        # For ADXV visu (PL 2015_01_23).
+        os.system("killall adxv_follow")
+        _cl = "gnome-terminal --title ADXV_TERM "
+        _cl += " --geometry=132x30+1680+5 -e adxv_follow &"
+        os.system(_cl)
+        time.sleep(1.)
+        adxv_host = '127.0.0.1'
+        adxv_port = 8100
+
         try:
-          suffix_path=os.path.join(*dir_path_list[4:])
-        except TypeError:
-          return None
-        else:
-          if 'inhouse' in directory:
-            archive_dir = os.path.join('/data/pyarch/', dir_path_list[2], suffix_path)
-          else:
-            archive_dir = os.path.join('/data/pyarch/', dir_path_list[4], dir_path_list[3], *dir_path_list[5:])
-          if archive_dir[-1] != os.path.sep:
-            archive_dir += os.path.sep
-            
-          return archive_dir
+            res = socket.getaddrinfo(adxv_host, adxv_port, 0, socket.SOCK_STREAM)
+            af, socktype, proto, canonname, sa = res[0]
+            self.adxv_socket = socket.socket(af, socktype, proto)
+            self.adxv_socket.connect((adxv_host, adxv_port))
+            logging.getLogger().info("ADXV OK.") 
+        except:
+            self.adxv_socket = None
+            logging.getLogger("user_level_log").info("Warning: Can't connect to adxv for following collect.")
+
+def test():
+    import os
+    hwr_directory = os.environ["XML_FILES_PATH"]
+
+    hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
+    hwr.connect()
+
+    coll = hwr.getHardwareObject("/mxcollect")
+
+    #print "Machine current is ", coll.get_machine_current()
+    print "Synchrotron name is ", coll.bl_config.synchrotron_name
+    #res_corner = coll.get_resolution_at_corner()
+    #print "Resolution corner is ", res_corner
+    #print coll._detector.jpeg_allframes 
+ 
+    #coll.current_jpeg_full_path = "/data1-1/test/visitor/mx2014/px1/20150122/ARCHIVE/genthumb5_1_0001.jpg"
+    #coll.trigger_data_sync()
+
+    time.sleep(2)
+    coll._detector.adxv_sync("/data1-1/test/visitor/mx2014/px1/20150123/RAW_DATA/ruchetest_3_0003.cbf")
+    time.sleep(2)
+    coll._detector.adxv_sync("/data1-1/test/visitor/mx2014/px1/20150123/RAW_DATA/ruchetest_3_0002.cbf")
+
+if __name__ == '__main__':
+   test()
+

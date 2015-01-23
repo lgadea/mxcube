@@ -15,6 +15,7 @@ as initially developed by Michael Hellmig for BESSY beamlines
 
 import logging
 from GenericSampleChanger import *
+from PX1Environment import EnvironmentPhase
 import time
 import gevent
 
@@ -91,14 +92,22 @@ class PX1Cats(SampleChanger):
         self._global_state = None
 
         self.currentBasketDataMatrix = "this-is-not-a-matrix"
-        self.currentSample = "this-is-not-a-sample"
-        self.currentBasket = "this-is-not-a-basket"
+        self.currentSample = -1
+        self.currentBasket = -1
 
         # initialize the sample changer components, moved here from __init__ after allowing
         # variable number of lids
         for i in range(PX1Cats.NO_OF_BASKETS):
             basket = Basket(self,i+1)
             self._addComponent(basket)
+
+        self.environment = self.getObjectByRole("environment")
+
+        if self.environment is None:
+            logging.error("PX1Cats. environment object not available. Sample changer cannot operate. Info.mode only")
+            self.infomode = True
+        else:
+            self.infomode = False
 
         for channel_name in ("_chnState", "_chnStatus", \
                              "_chnLidState", "_chnPathRunning", \
@@ -190,6 +199,8 @@ class PX1Cats(SampleChanger):
                 sample = self.getComponentByAddress(Pin.getSampleAddress(basket_no, sample_no))            
         except:
           pass
+        self.currentBasket = basket_no
+        self.currentSample = sample_no
         self._setSelectedComponent(basket)
         self._setSelectedSample(sample)
 
@@ -278,15 +289,18 @@ class PX1Cats(SampleChanger):
         argin = [PX1Cats.TOOL, str(lid), str(sample), "1", "0", "0", "0", "0"]
             
         self._setState( SampleChangerState.Loading )
+        self.current_state = SampleChangerState.Loading
 
+        if not self.environment.readyForTransfer():
+             self.environment.setPhase(EnvironmentPhase.TRANSFER)
+        
         if self.hasLoadedSample():
             if selected==self.getLoadedSample():
                 raise Exception("The sample " + str(self.getLoadedSample().getAddress()) + " is already loaded")
             else:
-                print "Executing exchange. Argin is: %s" % str(argin)
-                self._executeServerTask(self._cmdChainedLoad, "Exchange", argin=argin)
+                self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
         else:
-            self._executeServerTask(self._cmdLoad, "Load", argin=argin)
+                self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
             
     def _doUnload(self,sample_slot=None):
         """
@@ -298,10 +312,14 @@ class PX1Cats(SampleChanger):
         if (sample_slot is not None):
             self._doSelect(sample_slot)
 
+        if not self.environment.readyForTransfer():
+             self.environment.setPhase(EnvironmentPhase.TRANSFER)
+        
         self._setState( SampleChangerState.Loading )
+        self.current_state = SampleChangerState.Loading
 
         argin = [PX1Cats.TOOL, "0", "0", "0", "0"]
-        self._executeServerTask(self._cmdUnload, "Unload", argin=argin)
+        self._executeServerTask(self._cmdUnload, "Unload", states=[SampleChangerState.Ready,], argin=argin)
 
     def clearBasketInfo(self, basket):
         pass
@@ -329,19 +347,21 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
+        if self.infomode:
+            logging.warning("PX1Cats. It is in info mode only. Command %s ignored" % taskname)
+            return 
 
         if states == None:
-            states = [SampleChangerState.Ready,]
+            states = [SampleChangerState.Ready, SampleChangerState.StandBy]
 
         self._waitDeviceState( states, 3.0 )
-        print " executing command, args are: %s" % str(argin)
 
         if argin == None:
            task_id = method()
         else:
            task_id = method(argin)
 
-        print "PX1Cats._executeServerTask", task_id
+        logging.info("PX1Cats._executeServerTask %s" %task_id)
         self.task_started = time.time()
         self.task_name = taskname
 
@@ -349,12 +369,12 @@ class PX1Cats(SampleChanger):
         if task_id is None: #Reset
             while self._isDeviceBusy():
                 gevent.sleep(0.1)
+            logging.info("PX1Cats._executeServerTask. Done with waiting on no task.")
+            state = self._readState()
+            logging.info("PX1Cats._executeServerTask. state at end of task is %s" % str(state))
         else:
-            # introduced 2 seconds wait because it takes some time before the moving state is reported 
-            # after launching a transfer
-            time.sleep(2.0)
-            self._waitDeviceState( [SampleChangerState.Moving,],  )
-            print "PX1Cats._executeServerTask. Done with waiting", task_id
+            self._waitDeviceState( [SampleChangerState.Ready, SampleChangerState.StandBy],  )
+            logging.info("PX1Cats._executeServerTask. Done with waiting.")
             ret = True
         return ret
 
@@ -427,11 +447,12 @@ class PX1Cats(SampleChanger):
                             "ON": SampleChangerState.Ready,
                             "OFF": SampleChangerState.Off,
                             "DISABLE": SampleChangerState.Unknown,
+                            "STANDBY": SampleChangerState.StandBy,
                             "FAULT": SampleChangerState.Fault,
                             "RUNNING": SampleChangerState.Moving }
 
         sc_state = state_converter.get(stateStr, SampleChangerState.Unknown)
-        if sc_state == SampleChangerState.Ready:
+        if sc_state in [SampleChangerState.Ready, SampleChangerState.StandBy]:
             if ( time.time() - self.task_started ) < 3.0:
                 sc_state = SampleChangerState.Moving
 
@@ -456,7 +477,7 @@ class PX1Cats(SampleChanger):
             state = self._readState()
 
         return state not in (SampleChangerState.Ready, SampleChangerState.Alarm, SampleChangerState.Off,
-                             SampleChangerState.Fault, SampleChangerState.Unknown)
+                             SampleChangerState.StandBy, SampleChangerState.Fault )
 
     def _isDeviceReady(self):
         """
@@ -466,7 +487,7 @@ class PX1Cats(SampleChanger):
         :rtype: Bool
         """
         state = self._readState()
-        return state in (SampleChangerState.Ready, )              
+        return state in (SampleChangerState.Ready, SampleChangerState.StandBy )              
 
     def _waitDeviceState(self,states,timeout=None):
         """
@@ -485,7 +506,6 @@ class PX1Cats(SampleChanger):
                 if state in states:
                     waiting = False
                 gevent.sleep(0.01)
-            
 
     def _waitDeviceReady(self,timeout=None):
         """
@@ -697,6 +717,10 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
+        if self.infomode:
+            logging.warning("PX1Cats. It is in info mode only. DrySoak command ignored")
+            return 
+
         self._cmdDrySoak()
 
     def _doSafe(self):
@@ -706,7 +730,11 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        self._executeServerTask(self._cmdSafe, "Safe", [SampleChangerState.Ready, SampleChangerState.Alarm])
+        if not self.environment.readyForTransfer():
+             self.environment.setPhase(EnvironmentPhase.TRANSFER)
+        
+        if self.environment.readyForTransfer():
+            self._executeServerTask(self._cmdSafe, "Safe", states=[SampleChangerState.Ready, SampleChangerState.Alarm])
 
     def _doPowerState(self, state=False):
         """
@@ -826,16 +854,17 @@ class PX1Cats(SampleChanger):
         if value is None:
              value = self._chnToolOpen.getValue()
 
+        self._toolState = value
         if self._toolState != value:
-             self._toolState = value
              self.emit('toolOpenChanged', (value, ))
 
     def _updateLidState(self, value=None):
         if value is None:
             value = self._chnLidState.getValue()
 
+        self._lidState = value
+
         if value != self._lidState:
-            self._lidState = value
             self.emit('lidStateChanged', (not value, ))
 
 

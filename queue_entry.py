@@ -1173,7 +1173,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
 
     if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__')\
        and (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
-        element = '%d:%02d' % loc
+        element = '%d:%02d' % tuple(map(int,loc))
         beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
     else:
         beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,

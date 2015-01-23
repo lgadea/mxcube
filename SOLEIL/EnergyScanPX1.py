@@ -471,12 +471,12 @@ class EnergyScanPX1(Equipment):
         
     def storeEnergyScan(self):
         logging.getLogger("HWR").debug('EnergyScan:storeEnergyScan')
-        #if self.dbConnection is None:
-            #return
-        #try:
-            #session_id=int(self.scanInfo['sessionId'])
-        #except:
-            #return
+        if self.dbConnection is None:
+            return
+        try:
+            session_id=int(self.scanInfo['sessionId'])
+        except:
+            return
         return
         
     def updateEnergyScan(self, scan_id, jpeg_scan_filename):

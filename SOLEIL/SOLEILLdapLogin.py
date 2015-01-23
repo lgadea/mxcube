@@ -1,5 +1,5 @@
-from HardwareRepository.BaseHardwareObjects import Procedure
 from HardwareRepository import HardwareRepository
+from HardwareRepository.BaseHardwareObjects import Procedure
 import os
 import logging
 import ldap
@@ -77,22 +77,22 @@ class SOLEILLdapLogin(Procedure):
         return (False,msg)
 
     # Check password in LDAP
+    def getinfo(self,username):
+
+        found = self.search_user(username)
+
+        if not found:
+            return self.cleanup(msg="unknown proposal %s" % username)
+        else:
+            dn, info = found[0]
+            return info
+
     def login(self,username,password,retry=True):
 
         if self.ldapConnection is None:
             return self.cleanup(msg="no LDAP server configured")
 
-        logging.getLogger("HWR").debug("LdapLogin: searching for %s (dcparts are: %s)" % (username, self.dcparts))
-        try:
-            found=self.ldapConnection.search_s(self.dcparts, ldap.SCOPE_SUBTREE, "uid="+username)
-        except ldap.LDAPError,err:
-            if retry:
-                self.cleanup(ex=err)
-                return self.login(username,password,retry=False)
-            else:
-                return self.cleanup(ex=err)
-
-
+        found = self.search_user(username)
 
         if not found:
             return self.cleanup(msg="unknown proposal %s" % username)
@@ -120,6 +120,22 @@ class SOLEILLdapLogin(Procedure):
 
         return (True,username)
 
+    def search_user(self,username):
+
+        logging.getLogger("HWR").debug("LdapLogin: searching for %s (dcparts are: %s)" % (username, self.dcparts))
+
+        try:
+            found=self.ldapConnection.search_s(self.dcparts, ldap.SCOPE_SUBTREE, "uid="+username)
+        except ldap.LDAPError,err:
+            if retry:
+                self.cleanup(ex=err)
+                return self.login(username,password,retry=False)
+            else:
+                return self.cleanup(ex=err)
+        else:
+            return found
+
+
 def test():
     hwr_directory = os.environ["XML_FILES_PATH"] 
 
@@ -127,7 +143,20 @@ def test():
     hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
     hwr.connect()
 
-    calib = hwr.getHardwareObject("/ldapconnection")
+    conn = hwr.getHardwareObject("/ldapconnection")
+    #conn.login("20141015", "4dBM0lx3pw")
+
+    ok,name = conn.login("99140198", "5u4Twf70K5")
+    ok,name = conn.login("legrand", "5u4Twf70K5")
+
+    #info = conn.getinfo("legrand")
+    info = conn.getinfo("99140198")
+
+    if info:
+         print "GID:", info.get('gidNumber','')[0]
+         print "UID:", info.get('uidNumber','')[0]
+         print "title:", info.get('title','')
+
 
 if __name__ == '__main__':
    test()

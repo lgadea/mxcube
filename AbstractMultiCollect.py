@@ -62,8 +62,8 @@ class AbstractMultiCollect(object):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self):
-        self.bl_control = BeamlineControl(*[None]*13)
-        self.bl_config = BeamlineConfig(*[None]*28)
+        self.bl_control = BeamlineControl(*[None]*len(BeamlineControl._fields))
+        self.bl_config = BeamlineConfig(*[None]*len(BeamlineConfig._fields))
         self.data_collect_task = None
         self.oscillations_history = []
         self.current_lims_sample = None
@@ -639,8 +639,11 @@ class AbstractMultiCollect(object):
                     und = self.get_undulators_gaps()
                     i = 1
                     for key in und:
-                        self.bl_config.undulators[i-1].type = key
-                        data_collect_parameters["undulatorGap%d" %i] = und[key]  
+                        try:
+                            self.bl_config.undulators[i-1].type = key
+                            data_collect_parameters["undulatorGap%d" %i] = und[key]  
+                        except:
+                            data_collect_parameters["undulatorGap%d" %i] = -1
                         i += 1
 
                     data_collect_parameters["resolutionAtCorner"] = self.get_resolution_at_corner()
