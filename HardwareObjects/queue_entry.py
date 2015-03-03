@@ -670,12 +670,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
                 empty_cpos = queue_model_objects.CentredPosition()
 
                 if cpos != empty_cpos:
-                    log.info("Moving sample to given position ...")
-                    list_item.setText(1, "Moving sample")
                     self.shape_history.select_shape_with_cpos(cpos)
-                    self.centring_task = self.diffractometer_hwobj.\
-                                         moveToCentredPosition(cpos, wait=False)
-                    self.centring_task.get()
                 else:
                     pos_dict = self.diffractometer_hwobj.getPositions()
                     cpos = queue_model_objects.CentredPosition(pos_dict)
