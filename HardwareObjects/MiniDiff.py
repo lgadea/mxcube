@@ -170,13 +170,13 @@ class MiniDiff(Equipment):
             logging.getLogger("HWR").error('MiniDiff: phi motor is not defined in minidiff equipment %s', str(self.name()))
         if self.phizMotor is not None:
             self.connect(self.phizMotor, 'stateChanged', self.phizMotorStateChanged)
-            self.connect(self.phizMotor, 'positionChanged', self.phizMotorMoved)
+            self.connect(self.phizMotor, 'positionChanged', self.invalidateCentring)
             self.connect(self.phizMotor, "positionChanged", self.emitDiffractometerMoved)
         else:
             logging.getLogger("HWR").error('MiniDiff: phiz motor is not defined in minidiff equipment %s', str(self.name()))
         if self.phiyMotor is not None:
             self.connect(self.phiyMotor, 'stateChanged', self.phiyMotorStateChanged)
-            self.connect(self.phiyMotor, 'positionChanged', self.phiyMotorMoved)
+            self.connect(self.phiyMotor, 'positionChanged', self.invalidateCentring)
             self.connect(self.phiyMotor, "positionChanged", self.emitDiffractometerMoved)
         else:
             logging.getLogger("HWR").error('MiniDiff: phiy motor is not defined in minidiff equipment %s', str(self.name()))
@@ -187,13 +187,13 @@ class MiniDiff(Equipment):
             logging.getLogger("HWR").error('MiniDiff: zoom motor is not defined in minidiff equipment %s', str(self.name()))
         if self.sampleXMotor is not None:
             self.connect(self.sampleXMotor, 'stateChanged', self.sampleXMotorStateChanged)
-            self.connect(self.sampleXMotor, 'positionChanged', self.sampleXMotorMoved)
+            self.connect(self.sampleXMotor, 'positionChanged', self.invalidateCentring)
             self.connect(self.sampleXMotor, "positionChanged", self.emitDiffractometerMoved)
         else:
             logging.getLogger("HWR").error('MiniDiff: sampx motor is not defined in minidiff equipment %s', str(self.name()))
         if self.sampleYMotor is not None:
             self.connect(self.sampleYMotor, 'stateChanged', self.sampleYMotorStateChanged)
-            self.connect(self.sampleYMotor, 'positionChanged', self.sampleYMotorMoved)
+            self.connect(self.sampleYMotor, 'positionChanged', self.invalidateCentring)
             self.connect(self.sampleYMotor, "positionChanged", self.emitDiffractometerMoved)
         else:
             logging.getLogger("HWR").error('MiniDiff: sampx motor is not defined in minidiff equipment %s', str(self.name()))
@@ -205,7 +205,7 @@ class MiniDiff(Equipment):
             logging.getLogger("HWR").warning('MiniDiff: sample changer is not defined in minidiff equipment %s', str(self.name()))
         else:
             try:
-                self.connect(self.sampleChanger, 'sampleIsLoaded', self.sampleChangerSampleIsLoaded)
+                self.connect(self.sampleChanger, 'sampleIsLoaded', self.invalidateCentring)
             except:
                 logging.getLogger("HWR").exception('MiniDiff: could not connect to sample changer smart magnet')
         if self.lightWago is not None:
@@ -303,35 +303,12 @@ class MiniDiff(Equipment):
         self.emit('minidiffStateChanged', (state,))
 
 
-    def invalidateCentring(self):
-        if self.currentCentringProcedure is None and self.centringStatus["valid"]:
+    def invalidateCentring(self, *args):
+        if self.currentCentringProcedure is None and self.centringStatus["valid"] and time.time() - self.centredTime > 1.0:
             self.centringStatus={"valid":False}
             self.emitProgressMessage("")
             self.emit('centringInvalid', ())
 
-
-    def phizMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
-          self.invalidateCentring()
-
-    def phiyMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
-           self.invalidateCentring()
-
-
-    def sampleXMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
-           self.invalidateCentring()
-
-
-    def sampleYMotorMoved(self, pos):
-        if time.time() - self.centredTime > 1.0:
-           self.invalidateCentring()
-
-
-    def sampleChangerSampleIsLoaded(self, state):
-        if time.time() - self.centredTime > 1.0:
-           self.invalidateCentring()
 
     def getBeamPosX(self):
         return self.imgWidth / 2
@@ -461,10 +438,11 @@ class MiniDiff(Equipment):
             logging.exception("Could not move to centred position")
             self.emitCentringFailed()
           
-          #logging.info("EMITTING CENTRING SUCCESSFUL")
-          self.centredTime = time.time()
-          self.emitCentringSuccessful()
-          self.emitProgressMessage("")
+          try:
+              self.emitCentringSuccessful()
+              self.emitProgressMessage("")
+          finally:
+              self.centredTime = time.time()
 
     def autoCentringDone(self, auto_centring_procedure): 
         self.emitProgressMessage("")
