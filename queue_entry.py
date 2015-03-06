@@ -393,14 +393,17 @@ class TaskGroupQueueEntry(BaseQueueEntry):
                   _store_data_collection_group(group_data)
                 self.get_data_model().lims_group_id = gid
             except Exception as ex:
+                #  WE DO NOT RAISE an exception. It will stop collection if ISPyB not available or error
+                #   simple give the error in the main console
                 msg = 'Could not create the data collection group' + \
                       ' in LIMS. Reason: ' + str(ex)
-                raise QueueExecutionException(msg, self)
+                logging.getLogger('user_level_log').warning(msg)
+                #raise QueueExecutionException(msg, self)
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
         self.lims_client_hwobj = self.beamline_setup.lims_client_hwobj
-        self.session_hwobj     = self.beamline_setup.session_hwobj
+        self.session_hwobj = self.beamline_setup.session_hwobj
 
     def post_execute(self):
         BaseQueueEntry.post_execute(self)
@@ -592,8 +595,6 @@ class DataCollectionQueueEntry(BaseQueueEntry):
 
         self.lims_client_hwobj = self.beamline_setup.lims_client_hwobj
         self.collect_hwobj = self.beamline_setup.collect_hwobj
-        logging.info("queue_entry. Preparing data collection. beamline setup from  %s" % str(self.beamline_setup))
-        logging.info("queue_entry. Preparing data collection on object %s" % str(self.collect_hwobj))
         self.diffractometer_hwobj = self.beamline_setup.diffractometer_hwobj
         self.shape_history = self.beamline_setup.shape_history_hwobj
         self.session = self.beamline_setup.session_hwobj
@@ -620,7 +621,6 @@ class DataCollectionQueueEntry(BaseQueueEntry):
             self.get_data_model().lims_group_id = gid
 
     def post_execute(self):
-        logging.getLogger().debug("  running post execute in Datacollectionqueueentry")
         BaseQueueEntry.post_execute(self)
         qc = self.get_queue_controller()
 
@@ -642,13 +642,9 @@ class DataCollectionQueueEntry(BaseQueueEntry):
         self.get_view().set_checkable(False)
 
     def collect_dc(self, dc, list_item):
-
         log = logging.getLogger("user_level_log")
 
-        log.info("queue_entry. Start data collection on object %s" % str(self.collect_hwobj))
-
-        if self.collect_hwobj is not None:
-     
+        if self.collect_hwobj:
             acq_1 = dc.acquisitions[0]
             cpos = acq_1.acquisition_parameters.centred_position
             sample = self.get_data_model().get_parent().get_parent()
@@ -657,7 +653,6 @@ class DataCollectionQueueEntry(BaseQueueEntry):
                 if dc.experiment_type is EXPERIMENT_TYPE.HELICAL:
                     acq_1, acq_2 = (dc.acquisitions[0], dc.acquisitions[1])
                     #self.collect_hwobj.getChannelObject("helical").setValue(1)
-                    self.collect_hwobj.setHelical(1)
 
                     start_cpos = acq_1.acquisition_parameters.centred_position
                     end_cpos = acq_2.acquisition_parameters.centred_position
@@ -666,15 +661,19 @@ class DataCollectionQueueEntry(BaseQueueEntry):
                                          store_centred_position(end_cpos)
 
                     helical_oscil_pos = {'1': start_cpos.as_dict(), '2': end_cpos.as_dict()}
-                    self.collect_hwobj.getChannelObject('helical_pos').setValue(helical_oscil_pos)
-
+                    #self.collect_hwobj.getChannelObject('helical_pos').setValue(helical_oscil_pos)
+                    self.collect_hwobj.set_helical(True, helical_oscil_pos)
+                    
                     msg = "Helical data collection, moving to start position"
                     log.info(msg)
                     log.info("Moving sample to given position ...")
                     list_item.setText(1, "Moving sample")
                 else:
-                    self.collect_hwobj.setHelical(0)
-
+                    #self.collect_hwobj.getChannelObject("helical").setValue(0)
+                    self.collect_hwobj.set_helical(False)
+                    #log.info('queue_entry, dc.acquisitions[0].acquisition_parameters.centred_position %s' % dc.acquisitions[0].acquisition_parameters.centred_position)
+                    self.collect_hwobj.set_collect_position(dc.acquisitions[0].acquisition_parameters.centred_position)
+                    
                 empty_cpos = queue_model_objects.CentredPosition()
 
                 if cpos != empty_cpos:
@@ -718,12 +717,14 @@ class DataCollectionQueueEntry(BaseQueueEntry):
             raise QueueExecutionException(msg, self)
 
     def collect_started(self, owner, num_oscillations):
-        logging.getLogger("user_level_log").info('Collection started')
+        logging.getLogger("user_level_log").info('Starting collection')
 
     def collect_number_of_frames(self, number_of_images=0):
         pass
 
     def image_taken(self, image_number):
+        # this is to work around the remote access problem
+        dispatcher.send("collect_started")
         num_images = str(self.get_data_model().acquisitions[0].\
                      acquisition_parameters.num_images)
 
@@ -757,7 +758,6 @@ class DataCollectionQueueEntry(BaseQueueEntry):
         logging.getLogger("user_level_log").info('Collection completed')
 
     def stop(self):
-        logging.getLogger().debug(" stopping in data collection queue entry")
         BaseQueueEntry.stop(self)
 
         try:
@@ -767,12 +767,7 @@ class DataCollectionQueueEntry(BaseQueueEntry):
             if self.centring_task:
                 self.centring_task.kill(block=False)
         except gevent.GreenletExit:
-            import traceback
-            logging.getLogger().debug( " except in stop: " + traceback.format_exc() )
             raise
-        except:
-            import traceback
-            logging.getLogger().debug( " except in stop2: " + traceback.format_exc() )
 
         self.get_view().setText(1, 'Stopped')
         logging.getLogger('queue_exec').info('Calling stop on: ' + str(self))
@@ -1040,20 +1035,35 @@ class EnergyScanQueueEntry(BaseQueueEntry):
         self.get_view().setText(1, "In progress")
 
     def energy_scan_finished(self, scan_info):
+
         energy_scan = self.get_data_model()
+
         scan_file_path = os.path.join(energy_scan.path_template.directory,
                                       energy_scan.path_template.get_prefix())
 
-        scan_file_archive_path = os.path.join(energy_scan.path_template.\
-                                              get_archive_directory(),
+        # get archive directory from session and not from PathTemplate (that implements a very ESRF-like version)
+        #    Session is the place where the system know about local specificities
+        archive_directory = self.session_hwobj.get_archive_directory( energy_scan.path_template.directory )
+        scan_file_archive_path = os.path.join(archive_directory,
                                               energy_scan.path_template.get_prefix())
 
-        (pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm,
-         chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title) = \
-         self.energy_scan_hwobj.doChooch(None, energy_scan.element_symbol,
-                                         energy_scan.edge,
-                                         scan_file_archive_path,
-                                         scan_file_path)
+        logging.info('energy_scan.element_symbol %s, energy_scan.edge %s, scan_file_archive_path %s, scan_file_path %s' %(energy_scan.element_symbol, energy_scan.edge, scan_file_archive_path, scan_file_path))
+
+        egy_result = self.energy_scan_hwobj.doChooch(energy_scan.element_symbol, energy_scan.edge, scan_file_archive_path, scan_file_path)
+        
+        # Try to unpack values only if succesful. Otherwise return None
+        if egy_result is None:
+             logging.info('energy_scan. failed. ')
+             return None
+        
+        (pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title) = egy_result
+
+        #(pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm,
+        #chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title) = \
+        #self.energy_scan_hwobj.doChooch(None, energy_scan.element_symbol,
+                                         #energy_scan.edge,
+                                         #scan_file_archive_path,
+                                         #scan_file_path)
 
         #scan_info = self.energy_scan_hwobj.scanInfo
 
@@ -1173,7 +1183,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
 
     if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__')\
        and (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
-        element = '%d:%02d' % tuple(map(int,loc))
+        element = '%d:%02d' % loc
         beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
     else:
         beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,

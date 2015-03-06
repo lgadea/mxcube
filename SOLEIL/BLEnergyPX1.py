@@ -136,6 +136,9 @@ class BLEnergy (Device) :
             return None
     
         
+    def getLimits(self):
+        return getEnergyLimits()
+
     def getEnergyLimits(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.getEnergyLimits", self.name())
         if self.deviceOk :          

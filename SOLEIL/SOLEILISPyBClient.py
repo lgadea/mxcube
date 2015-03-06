@@ -149,7 +149,7 @@ def test():
 
     db = hwr.getHardwareObject("/dbconnection")
 
-    info = db.get_proposal("mx","2014")
+    info = db.get_proposal("mx","20100023")
     print info
  
 if __name__ == '__main__':

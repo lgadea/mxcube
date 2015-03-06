@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 from qt import *
+
+from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Equipment
+
 import logging
 import os
 import time
 import types
 import gevent
-from XfeCollect import XfeCollect
 
 
 class XfeSpectrumPX1(Equipment):
@@ -17,57 +19,20 @@ class XfeSpectrumPX1(Equipment):
 
         self.storeSpectrumThread = None
 
+        self.xfecollect = self.getObjectByRole("xfecollect")
+
         if self.isConnected():
             self.sConnected()
 
-        #if True:
-            #try:
-                #self.energySpectrumArgs=self.getChannelObject('spectrum_args')
-            #except KeyError:
-                #logging.getLogger().warning('XRFSpectrum: error initializing energy spectrum arguments (missing channel)')
-                #self.energySpectrumArgs=None
-            #try:
-                #self.spectrumStatusMessage=self.getChannelObject('spectrumStatusMsg')
-            #except KeyError:
-                #self.spectrumStatusMessage=None
-                #logging.getLogger().warning('XRFSpectrum: energy messages will not appear (missing channel)')
-            #else:
-                #self.spectrumStatusMessage.connectSignal("update", self.spectrumStatusChanged)
-
-            #try:
-                #self.doSpectrum.connectSignal('commandReplyArrived', self.spectrumCommandFinished)
-                #self.doSpectrum.connectSignal('commandBeginWaitReply', self.spectrumCommandStarted)
-                #self.doSpectrum.connectSignal('commandFailed', self.spectrumCommandFailed)
-                #self.doSpectrum.connectSignal('commandAborted', self.spectrumCommandAborted)
-                #self.doSpectrum.connectSignal('commandReady', self.spectrumCommandReady)
-                #self.doSpectrum.connectSignal('commandNotReady', self.spectrumCommandNotReady)
-            #except AttributeError, diag:
-                #logging.getLogger().warning('XRFSpectrum: error initializing energy spectrum (%s)' % str(diag))
-                #self.doSpectrum=None
-            #else:
-                #self.doSpectrum.connectSignal("connected", self.sConnected)
-                #self.doSpectrum.connectSignal("disconnected", self.sDisconnected)
-
-            #self.dbConnection=self.getObjectByRole("dbserver")
-            #if self.dbConnection is None:
-                #logging.getLogger().warning('XRFSpectrum: you should specify the database hardware object')
-            #self.spectrumInfo=None
-            
-            #if self.isConnected():
-                    #self.sConnected()
-    
     def doSpectrum(self): #, ct, filename):
-        self.xfeCollect.measureSpectrum()
+        self.xfecollect.measureSpectrum()
         self.spectrumCommandFinished(0)
-        return self.xfeCollect.getXvals(), self.xfeCollect.getSpectrum()
+        value = self.xfecollect.getValue()
+        print value
+        return value
 
     def isConnected(self):
         return True
-        logging.info('XfeSpectrumPX1, isConnected, self.doSpectrum.isConnected is %s' % self.doSpectrum.isConnected())
-        try:
-            return self.doSpectrum.isConnected()
-        except:
-            return False
 
     # Handler for spec connection
     def sConnected(self):
@@ -82,14 +47,14 @@ class XfeSpectrumPX1(Equipment):
     def canSpectrum(self):
         if not self.isConnected():
             return False
-        return self.doSpectrum is not None
+        return self.xfecollect is not None
 
     def startXfeSpectrum(self, ct, directory, prefix, session_id=None, blsample_id=None):
         self.spectrumInfo = {"sessionId": session_id}
         self.spectrumInfo["blSampleId"] = blsample_id
         
         #inintializing the collect object
-        self.xfeCollect = XfeCollect(ct, directory, prefix, sessionId = session_id, sampleId = blsample_id)
+        self.xfecollect.setup(ct, directory, prefix, sessionId = session_id, sampleId = blsample_id)
         
         if not os.path.isdir(directory):
             logging.getLogger().debug(
@@ -111,29 +76,6 @@ class XfeSpectrumPX1(Equipment):
             curr = {}
             curr["escan_dir"] = directory
             curr["escan_prefix"] = prefix
-
-        #a = directory.split(os.path.sep)
-        #suffix_path = os.path.join(*a[4:])
-        #if 'inhouse' in a:
-            #a_dir = os.path.join('/data/pyarch/', a[2], suffix_path)
-        #else:
-            #a_dir = os.path.join('/data/pyarch/', a[4], a[3], *a[5:])
-        #if a_dir[-1] != os.path.sep:
-            #a_dir += os.path.sep
-        #if not os.path.exists(a_dir):
-            #try:
-                ##logging.getLogger().debug("XRFSpectrum: creating %s", a_dir)
-                #os.makedirs(a_dir)
-            #except:
-                #try:
-                    #smis_name = os.environ["SMIS_BEAMLINE_NAME"].lower()
-                    #x, y = smis_name.split("-")
-                    #bldir = x + "eh" + y
-                #except:
-                    #bldir = os.environ["SMIS_BEAMLINE_NAME"].lower()
-                #tmp_dir = "/data/pyarch/%s" % bldir
-                #logging.getLogger().error(
-                    #"XRFSpectrum: error creating archive directory - the data will be saved in %s instead", tmp_dir)
 
         a_dir = os.path.normpath(directory)
         print 'XfeSpectrumPX1.py a_dir', a_dir
@@ -163,12 +105,14 @@ class XfeSpectrumPX1(Equipment):
         self.spectrumInfo["annotatedPymcaXfeSpectrum"] = htmlname
         logging.getLogger().debug("XRFSpectrum: archive file is %s", aname)
 
+        print "spawning task"
         gevent.spawn(self.reallyStartXfeSpectrum, ct, filename)
 
         return True
 
     def reallyStartXfeSpectrum(self, ct, filename):
         try:
+            print "really starting"
             res = self.doSpectrum() #(ct, filename, wait=True)
         except:
             logging.getLogger().exception(
@@ -179,8 +123,7 @@ class XfeSpectrumPX1(Equipment):
 
     def cancelXfeSpectrum(self, *args):
         if self.scanning:
-            #self.doSpectrum.abort()
-            self.xfeCollect.cancelXfeSpectrum()
+            self.xfecollect.cancelXfeSpectrum()
 
     def spectrumCommandReady(self):
         if not self.scanning:
@@ -213,15 +156,16 @@ class XfeSpectrumPX1(Equipment):
 
         if result == 0:
             #mcaData = self.getChannelObject('mca_data').getValue()
-            mcaData = self.xfeCollect.getValue()
+            mcaData = self.xfecollect.getValue()
             #mcaCalib = self.getChannelObject('calib_data').getValue()
-            mcaCalib = self.xfeCollect.getMcaCalib()
+            mcaCalib = self.xfecollect.getMcaCalib()
             #mcaConfig = self.getChannelObject('config_data').getValue()
-            mcaConfig = self.xfeCollect.getMcaConfig()
+            mcaConfig = self.xfecollect.getMcaConfig()
             self.spectrumInfo["beamTransmission"] = mcaConfig['att']
             self.spectrumInfo["energy"] = mcaConfig['energy']
             self.spectrumInfo["beamSizeHorizontal"] = float(mcaConfig['bsX'])
             self.spectrumInfo["beamSizeVertical"] = float(mcaConfig['bsY'])
+            mcaConfig["file"] = self.spectrumInfo['filename']
             mcaConfig["legend"] = self.spectrumInfo[
                 "annotatedPymcaXfeSpectrum"]
 
@@ -245,7 +189,8 @@ class XfeSpectrumPX1(Equipment):
         self.emit('spectrumStatusChanged', (status,))
 
     def storeXfeSpectrum(self):
-        self.xfeCollect.saveData()
+        print "storing xfespectrum" 
+        self.xfecollect.saveData()
         #logging.getLogger().debug("db connection %r", self.dbConnection)
         #logging.getLogger().debug("spectrum info %r", self.spectrumInfo)
         #if self.dbConnection is None:
@@ -274,3 +219,33 @@ class XfeSpectrumPX1(Equipment):
 
     def setSpectrumParams(self, pars):
         self.energySpectrumArgs.setValue(pars)
+
+def main():
+    # create the xanes object
+    hwr_directory = os.environ["XML_FILES_PATH"]
+
+    hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
+    hwr.connect()
+
+    xfe = hwr.getHardwareObject("/xfespectrum")
+    #xfe.xfecollect.setup(1, '/tmp', 'toto')
+    xfe.startXfeSpectrum(1, '/tmp', 'toto', session_id=None, blsample_id=None)
+    time.sleep(0.5)
+    #xfe.xfecollect.measureSpectrum()
+    #xfe.xfecollect.plotSpectrum()
+
+
+if __name__ == '__main__':
+    import sys
+    import os
+
+
+    print "Running XfeCollect procedure standalone"
+    hwrpath = os.environ.get('XML_FILES_PATH',None)
+
+    if hwrpath is None:
+        print "  -- you should first source the file mxcube.rc to set your environment variables"
+        sys.exit(0)
+    else:
+        main()
+

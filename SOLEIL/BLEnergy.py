@@ -1,4 +1,5 @@
-from qt import *
+#from qt import *
+from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Device
 from PyTango import DeviceProxy
 
@@ -112,12 +113,18 @@ class BLEnergy (Device) :
         logging.getLogger("HWR").debug("%s: BLEnergy.canMoveEnergy", self.name())
         return  True
         
+    def getPosition(self):
+        return self.getCurrentEnergy()
+
     def getCurrentEnergy(self):
         if self.deviceOk :           
             return self.BLEnergydevice.energy
         else : 
             return None
     
+    def getState(self):
+        return self.BLEnergydevice.State().name
+
     def getEnergyComputedFromCurrentGap(self):
         #logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentEnergy", self.name())
         if self.deviceOk:
@@ -143,6 +150,9 @@ class BLEnergy (Device) :
             return None
     
         
+    def getLimits(self):
+        return self.getEnergyLimits()
+
     def getEnergyLimits(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.getEnergyLimits", self.name())
         if self.deviceOk :          
@@ -290,80 +300,18 @@ class BLEnergy (Device) :
         logging.getLogger().error("Check Instance of Device server %s" % db.DbGetDeviceInfo(device)[1][3])
         self.sDisconnected()
 
-#     def energy2wavelength(self,val):
-#         try:
-#             other_val = 12.39854 / val
-#         except ZeroDivisionError:
-#             other_val=None
-#         return other_val
-#     
-#     def wavelength2energy(self,val):
-#         try:
-#             other_val = 12.39854 / val
-#         except ZeroDivisionError:
-#             other_val=None
-#         return other_val
-# 
-                
+def test():
+    import os
+    hwr_directory = os.environ["XML_FILES_PATH"]
 
+    hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
+    hwr.connect()
 
-#     # Energy scan commands
-#     def canScanEnergy(self):
-#         logging.getLogger().debug("HOS : passe dans canScanEnergy")
-#         return True
-#     
-#     def cancelEnergyScan(self):
-#         logging.getLogger().debug("HOS : passe dans cancelEnergyScan")
-#         return True
-#     
-#     def scanCommandReady(self):
-#         logging.getLogger().debug("HOS : passe dans scanCommandReady")
-#         if not self.scanning:
-#             self.emit('energyScanReady', (True,))
-#     
-#     def scanCommandNotReady(self):
-#         logging.getLogger().debug("HOS : passe dans scanCommandNotReady")      
-#         if not self.scanning:
-#             self.emit('energyScanReady', (False,))
-#     
-#     def scanCommandStarted(self):
-#         logging.getLogger().debug("HOS : passe dans scanCommandStarted")      
-#         self.scanInfo['startTime']=time.strftime("%Y-%m-%d %H:%M:%S")
-#         self.scanning = True
-#         self.emit('energyScanStarted', ())
-#         
-#     def scanCommandFailed(self):
-#         logging.getLogger().debug("HOS : passe dans scanCommandFailed")      
-#         self.scanInfo['endTime']=time.strftime("%Y-%m-%d %H:%M:%S")
-#         self.scanning = False
-#         self.storeEnergyScan()
-#         self.emit('energyScanFailed', ())
-#         
-#     def scanCommandAborted(self):
-#         pass
-#     
-#     def scanCommandFinished(self,result):
-#         logging.getLogger().debug("HOS : passe dans scanCommandFinished")      
-#         return
-# 
-#     def scanStatusChanged(self,status):
-#         logging.getLogger().debug("HOS : passe dans scanStatusChanged")      
-#         self.emit('scanStatusChanged', (status,))
-#     
-#     def storeEnergyScan(self):
-#         logging.getLogger().debug("HOS : passe dans storeEnergyScan")      
-# 
-#     def updateEnergyScan(self,scan_id,jpeg_scan_filename):
-#         pass
-# 
-    # Elements commands
-#    def getElements(self):
-#        elements=[]
-#        logging.getLogger().debug("HOS : passe dans getElements")      
-#        return elements
+    egy = hwr.getHardwareObject("/BLEnergy")
 
-    # Mad energies commands
-#    def getDefaultMadEnergies(self):
-#        energies=[]
-#        logging.getLogger().debug("HOS : passe dans getDefaultMadEnergies")      
-#        return energies
+    print egy.getPosition()
+ 
+
+if __name__ == '__main__':
+    test()
+

@@ -1,4 +1,5 @@
 
+from HardwareRepository import HardwareRepository
 from HardwareRepository import BaseHardwareObjects
 import logging
 
@@ -34,19 +35,23 @@ class PX1Flux(BaseHardwareObjects.Device):
         except PyTango.DevFailed:
             return -1
 
+    def getValue(self):
+        return self.getCurrentFlux()
+
     def fluxChanged(self, value):
         #
         # emit signal
         #
         self.flux = value
         self.emit('fluxChanged', value)
-
+        self.emit('valueChanged', str(self.flux))
 
     def stateChanged(self, value):
         #
         # emit signal
         #
         self.emit('fluxStatusChanged', value)
+        self.emit('stateChanged', value)
 
 
 def test():
@@ -56,8 +61,8 @@ def test():
     hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
     hwr.connect()
 
-    #flux = hwr.getHardwareObject("/flux")
-    #print "PX1 Flux is ",flux.getCurrentFlux()
+    flux = hwr.getHardwareObject("/flux")
+    print "PX1 Flux is ",flux.getCurrentFlux()
 
 
 if __name__ == '__main__':

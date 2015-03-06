@@ -855,6 +855,9 @@ class AbstractMultiCollect(object):
             self.data_collect_task.kill(block = False)
 
 
+    def set_helical(self, mode, positions):
+        logging.getLogger().debug("AbstractMultiCollect :setHelical. STUB")
+
     """
     processDataScripts
         Description    : executes a script after the data collection has finished

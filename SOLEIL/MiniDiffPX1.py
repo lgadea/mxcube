@@ -38,7 +38,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
       PHI.append(phi.getPosition())
       if len(X) == 3:
         break
-      phi.moveRelative(60)
+      phi.moveRelative(120)
 
     # 2014-01-19-bessy-mh: variable beam position coordinates are passed as parameters
     #beam_xc = imgWidth / 2

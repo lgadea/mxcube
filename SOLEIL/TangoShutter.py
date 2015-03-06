@@ -46,22 +46,7 @@ class TangoShutter(BaseHardwareObjects.Device):
         'STANDBY':  'STANDBY',
         'ON':       'UNKNOWN'
         }
-    #shutterState = {
-            #None: 'unknown',
-            #'UNKNOWN': 'unknown',
-            #'CLOSE': 'closed',
-            #'OPEN': 'opened',
-            #'INSERT': 'closed',
-            #'EXTRACT': 'opened',
-            #'MOVING': 'moving',
-            #'RUNNING':'moving',
-            #'_': 'automatic',
-            #'FAULT': 'fault',
-            #'DISABLE': 'disabled',
-            #'OFF': 'fault',
-            #'STANDBY': 'standby',
-            #'ON': 'unknown'
-            #}
+            
     shutterStateString = {
         'ON':        'white',
         'OFF':       '#012345',
@@ -111,10 +96,7 @@ class TangoShutter(BaseHardwareObjects.Device):
 
     def getShutterState(self):
         logging.getLogger().debug( "getShutterState return : %s" % TangoShutter.shutterState[str(self.shutterStateValue)].lower() )
-        #print "                      self.shutterStateValue=", self.shutterStateValue
-        #print 'getShutterState TangoShutter.shutterState[self.shutterStateValue].lower()', TangoShutter.shutterState[str(self.shutterStateValue)].lower()
         return TangoShutter.shutterState[str(self.shutterStateValue)].lower()
-
 
     def isShutterOk(self):
         return not self.getShutterState() in ('OFF', 'UNKNOWN', 'MOVING', 'FAULT', 'INSERT', 'EXTRACT',

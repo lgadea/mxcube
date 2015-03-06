@@ -90,7 +90,11 @@ class PixelDetector:
             _settings.append(["Chi %.4f", start])
 
         for _setting in _settings:
-            _str_set = (_setting[0] % _setting[1])
+            try:
+                _str_set = (_setting[0] % _setting[1])
+            except:
+                _str_set = _setting[0]
+
             logging.getLogger().info( "MxSettings: " + _str_set )
             self.pilatusServer.SetMxSettings(_str_set)
 
@@ -213,21 +217,26 @@ class PixelDetector:
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
-        adxv_send_fmt = "\nload_image %s" + "\n"+ chr(32)
+        adxv_send_fmt = "\nload_image %s  " + "\n"+ chr(32)
         logging.info(" ADXV_send_fmt")
-        logging.info(adxv_send_fmt % "toto")
+        logging.info(adxv_send_fmt % imgname)
         
         try:
             if not self.adxv_socket:
                 try:
                     self.connectVisualisation()
                 except:
+                    self.adxv_socket = None
                     logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
             else:
                 print "dxv_send_fmt % self.current_filename"
                 self.adxv_socket.send(adxv_send_fmt % self.current_filename)
         except:
-            pass
+            try:
+               del self.adxv_socket
+               self.connectVisualisation()
+            except:
+               self.adxv_socket = None
       
     def stop_acquisition(self):
         logging.info("<PX1 MultiCollect>  stopping acquisition ")
@@ -423,6 +432,25 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             if (time.time() - t0) > 4:
                 logging.getLogger("HWR").error("Timeout on closing fast shutter")
                 break
+
+    def set_helical(self, onmode, positions=None):
+        logging.info("<PX1 MultiCollect> set helical")
+        self.helical = onmode
+        if onmode:
+            logging.info("<PX1 MultiCollect> set helical pos1 %s pos2 %s" % (positions['1'], positions['2']))
+            self.helicalStart = positions['1']
+            self.helicalFinal = positions['2']
+
+    def set_collect_position(self, position):
+        logging.info("<PX2 MultiCollect> set collect position %s" % position)
+        logging.info("<PX2 MultiCollect> set collect position type %s" % type(position))
+        self.standard_collect = True
+        #pos = dict(position)
+        #collect_position = {} 
+        #for motor in self.motors:
+            #collect_position[motor] = pos[motor]
+
+        self.collect_position = self.bl_control.diffractometer.getPositions()
 
     @task
     def open_fast_shutter(self):
@@ -715,9 +743,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
 
     def get_archive_directory(self, directory):
-        res = None
        
-        archive_dir = directory.replace("RAW_DATA","ARCHIVE")
+        archive_dir = self.session_hwo.get_archive_directory(directory)
         logging.getLogger().info("<PX1 MultiCollect> - get archive directory (using %s)" % archive_dir)
 
         return archive_dir 
@@ -732,11 +759,11 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def connectVisualisation(self):
         # For ADXV visu (PL 2015_01_23).
-        os.system("killall adxv_follow")
-        _cl = "gnome-terminal --title ADXV_TERM "
-        _cl += " --geometry=132x30+1680+5 -e adxv_follow &"
-        os.system(_cl)
-        time.sleep(1.)
+        #os.system("killall adxv_follow")
+        #_cl = "gnome-terminal --title ADXV_TERM "
+        #_cl += " --geometry=132x30+1680+5 -e adxv_follow &"
+        #os.system(_cl)
+        #time.sleep(1.)
         adxv_host = '127.0.0.1'
         adxv_port = 8100
 
@@ -748,7 +775,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             logging.getLogger().info("ADXV OK.") 
         except:
             self.adxv_socket = None
-            logging.getLogger("user_level_log").info("Warning: Can't connect to adxv for following collect.")
+            logging.getLogger().info("WARNING: Can't connect to ADXV.")
 
 def test():
     import os
