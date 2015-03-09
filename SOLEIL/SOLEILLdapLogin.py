@@ -184,15 +184,15 @@ class SOLEILLdapLogin(Procedure):
                 sesslist.extend( self.decode_session_info(projuser, desc) )
         return sesslist 
 
-    def find_valid_sessions_for_user(self,username):
+    def find_valid_sessions_for_user(self,username, beamline=None):
         sesslist = self.find_sessions_for_user(username)
-        return sesslist.find_valid_sessions()
+        return sesslist.find_valid_sessions(beamline=beamline)
 
     def decode_session_info(self, projuser, session_info):
         """ ext;proxima1:1266393600,1266595200-1265644800,1265846400-1425510000,1426114800 """
 
         retlist = SessionList()
-
+        
         beamlinelist = session_info.split(";")
 
         if len(beamlinelist) <2:
