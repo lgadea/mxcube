@@ -52,7 +52,15 @@ class SOLEILSession(Session.Session):
         if self.session_start_date:
             start_time = self.session_start_date.split(' ')[0] #.replace('-', '')
         else:
-            start_time = time.strftime("%Y-%m-%d")
+            # PL. To avoid mixing users directory if they restart the application
+            # after midnight but before 7 AM, the directory date doesn't change:
+            _local_time = time.localtime()
+            if _local_time[3] > 7:
+                start_time = time.strftime("%Y-%m-%d")
+            else:
+                # substract 8 hourse to current date to get yesterday's date. 
+                _local_time = time.gmtime((time.time() - 8*60*60))
+                start_time = time.strftime("%Y-%m-%d", _local_time)
 
         if self.is_inhouse():
             #directory = os.path.join(self.base_directory, self.endstation_name,
