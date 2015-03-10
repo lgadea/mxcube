@@ -95,17 +95,20 @@ class SOLEILLdapLogin(Procedure):
             return self.cleanup(msg="no LDAP server configured")
 
         found = self.search_user(username,retry)
-
+        
         if not found:
             return self.cleanup(msg="unknown proposal %s" % username)
         if password=="":
             return self.cleanup(msg="invalid password for %s" % username)
 
+	if type(found) != list:
+	    logging.getLogger("HWR").error("LdapLogin: found type: %s" % type(found))
+            return self.cleanup(msg="unknown error %s" % username)
+	    
         for dn,entry in found:
             dn = str(dn)
 
-        logging.getLogger("HWR").error("LdapLogin: found: %s" % dn)
-        
+        logging.getLogger("HWR").debug("LdapLogin: found: %s" % dn)
         logging.getLogger("HWR").debug("LdapLogin: validating %s" % username)
         handle=self.ldapConnection.simple_bind(dn,password)
         try:
