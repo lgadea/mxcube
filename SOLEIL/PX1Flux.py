@@ -43,8 +43,8 @@ class PX1Flux(BaseHardwareObjects.Device):
         # emit signal
         #
         self.flux = value
-        self.emit('fluxChanged', value)
-        self.emit('valueChanged', str(self.flux))
+        self.emit('fluxChanged', str("%7.1e" % value))
+        self.emit('valueChanged', str("%7.1e" % self.flux))
 
     def stateChanged(self, value):
         #
