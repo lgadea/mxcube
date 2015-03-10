@@ -1,7 +1,6 @@
 
+import os, time, logging
 from HardwareRepository import HardwareRepository
-import logging
-import os
 
 import Session
 
@@ -26,16 +25,58 @@ class SOLEILSession(Session.Session):
         self.user_id = user_id 
         self.projuser = projuser
 
-    def get_rawdata_directory(self, directory=None):
-        if directory is None:
-            thedir = self.get_base_data_directory()
+    def get_proposal_number(self):
+        """
+        :returns: The proposal, 'local-user' if no proposal is
+                  available
+        :rtype: str
+        """
+
+        if self.proposal_number:
+             return "%s" % (self.proposal_number)
+	else:
+	     return "local-user"
+
+    def get_base_data_directory(self):
+        """
+        Returns the base data directory taking the 'contextual'
+        information into account, such as if the current user
+        is inhouse.
+
+        :returns: The base data path.
+        :rtype: str
+        """
+        user_category = ''
+        directory = ''
+
+        if self.session_start_date:
+            start_time = self.session_start_date.split(' ')[0] #.replace('-', '')
         else:
-            thedir = directory
+            start_time = time.strftime("%Y-%m-%d")
 
-        if 'RAW_DATA' not in thedir:
-            thedir = os.path.join(thedir, 'ARCHIVE')
+        if self.is_inhouse():
+            #directory = os.path.join(self.base_directory, self.endstation_name,
+            #                         self.get_user_category(), self.get_proposal(),
+            #                         start_time)
+            directory = os.path.join(self.base_directory, start_time, self.proposal_number
+	                                         self.get_proposal_number())	    
+        else:
+            #directory = os.path.join(self.base_directory, self.get_user_category(),
+            #                         self.get_proposal(), self.endstation_name,
+            #                         start_time)
+            directory = os.path.join(self.base_directory, start_time, self.proposal_number
+	                                         self.get_proposal_number())
 
-        return thedir
+        return directory
+
+    #def get_rawdata_directory(self, directory=None):
+    #    if directory is None:
+    #        thedir = self.get_base_data_directory()
+    #    else:
+    #        thedir = directory
+    #    if 'RAW_DATA' not in thedir:
+    #        thedir = os.path.join(thedir, 'ARCHIVE')
+    #    return thedir
 
     def get_archive_directory(self, directory=None):
         if directory is None:
