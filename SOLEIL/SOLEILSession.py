@@ -31,12 +31,12 @@ class SOLEILSession(Session.Session):
                   available
         :rtype: str
         """
-
+        pn = "local-user"
         if self.proposal_number:
-             return "%s" % (self.proposal_number)
-	else:
-	     return "local-user"
-
+             pn = "%s" % self.proposal_number
+        #logging.debug("SESSION: pn = %s" % (pn))
+	return pn
+	     
     def get_base_data_directory(self):
         """
         Returns the base data directory taking the 'contextual'
@@ -66,14 +66,12 @@ class SOLEILSession(Session.Session):
             #directory = os.path.join(self.base_directory, self.endstation_name,
             #                         self.get_user_category(), self.get_proposal(),
             #                         start_time)
-            directory = os.path.join(self.base_directory, start_time, self.proposal_number
-	                                         self.get_proposal_number())	    
+            directory = os.path.join(self.base_directory, start_time, self.get_proposal_number())	    
         else:
             #directory = os.path.join(self.base_directory, self.get_user_category(),
             #                         self.get_proposal(), self.endstation_name,
             #                         start_time)
-            directory = os.path.join(self.base_directory, start_time, self.proposal_number
-	                                         self.get_proposal_number())
+            directory = os.path.join(self.base_directory, start_time, self.get_proposal_number())
 
         return directory
 
