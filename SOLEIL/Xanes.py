@@ -119,7 +119,7 @@ class Xanes(BaseHardwareObjects.Device):
         self.ble = dp(self.ble_dev)
         
         self.diodes = {}
-        for diode in self.diodes:
+        for diode in self['diodes']:
             name = diode.getProperty('diode') 
             devname = diode.getProperty('devname') 
             self.diodes[name] = dp(devname)
@@ -128,6 +128,7 @@ class Xanes(BaseHardwareObjects.Device):
 
         if self.normdiode not in self.diodes:
             logging.error("Xanes.py - normalization_diode must be in .xml and should be one of the defined diodes") 
+        logging.error("Xanes.py - self.diodes: %s" % self.diodes) 
  
         #self.counter = dp(self.counter_dev)
         self.pss = dp(self.pss_dev)
@@ -647,7 +648,6 @@ class Xanes(BaseHardwareObjects.Device):
         return {'pk': self.pk, 'fppPeak': self.fppPeak, 'fpPeak': self.fpPeak, 'ip': self.ip, 'fppInfl': self.fppInfl, 'fpInfl': self.fpInfl, 'efs': self.efs}
     
     def chooch(self):
-        return
         logging.info('chooch')
         chooch_parameters = {'element': self.element, 
                              'edge': self.edge,

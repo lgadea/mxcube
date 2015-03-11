@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import time
+import logging
 from Xanes import Xanes
 from PyTango import DeviceProxy as dp
 
@@ -18,13 +20,18 @@ class PX1Xanes(Xanes):
             return 'Moving'
         return 'Ready'
 
-    def set_collect_phase(self, phase_name='COLLECT'):
-        if self.test: return
+    def set_collect_phase(self, phase_name='FLUOX'):
+        if self.test:
+            return
 
-        self.px1env.GoToCollectPhase()
-
-        while self.px1env.currentPhase != phase_name or self.get_state() != 'Ready':
+        self.px1env.GoToFluoXPhase()
+        debut = time.time()
+        while self.px1env.readyForFluoScan != True:
+            #logging.debug("PX1Xanes - set_collect: readyForFluoScan %s" % self.px1env.readyForFluoScan)
             time.sleep(0.1)
+	    if (time.time() - debut) > 30:
+               logging.debug("PX1Xanes - Timed out while going to FluoXPhase")
+	       break
 
     def transmission(self, x=None):
         '''Get or set the transmission'''
@@ -40,6 +47,55 @@ class PX1Xanes(Xanes):
 
         self.Ps_h.gap = newGapFP_H
         self.Ps_v.gap = newGapFP_V
+
+    def safeOpenSafetyShutter(self):
+
+        logging.info('Opening the safety shutter -- checking the hutch PSS state')
+
+        if self.test:
+	    return
+
+        if int(self.pss.prmObt) == 1:
+            self.safshut.openShutter()
+            while self.safshut.getShutterState() != 'opened' and self.stt not in ['STOP', 'ABORT']:
+                time.sleep(0.1)
+
+        logging.info(self.safshut.getShutterState())
+
+    def cleanUp(self):
+        self.saveRaw()
+        self.chooch()
+        self.saveResults()
+
+        if self.test: 
+            return
+        self.ble.write_attribute('energy', self.pk/1000.)
+
+    def prepare(self):
+
+        logging.debug("PX1Xanes - starting prepare") 
+        self.getAbsEm()
+        self.setROI()
+        logging.debug("PX1Xanes - mid prepare") 
+        
+        self.set_collect_phase()
+        self.moveBeamlineEnergy(self.e_edge)
+        
+        #self.optimizeTransmission()
+        
+        if not self.test:
+            self.fluodet.set_preset( float(self.integrationTime) )
+                
+        self.results = {}
+        self.results['timestamp'] = time.time()
+        self.results['prefix'] = self.prefix
+        self.results['element'] = self.element
+        self.results['edge'] = self.edge
+        self.results['peakingTime'] = self.peakingTime
+        self.results['dynamicRange'] = self.dynamicRange
+        self.results['integrationTime'] = self.integrationTime
+        self.results['nbSteps'] = self.nbSteps
+        logging.debug("PX1Xanes - finishing prepare") 
 
     def attenuation(self, x=None):
         '''Read or set the attenuation'''
