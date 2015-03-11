@@ -429,6 +429,7 @@ class SampleQueueEntry(BaseQueueEntry):
         if len(self.get_data_model().get_children()) != 0 and sc_used:
             if self.sample_changer_hwobj is not None:
                 log.info("Loading sample " + self._data_model.loc_str)
+                log.info("Loading sample %s" % self._data_model)
 
                 sample_mounted = self.sample_changer_hwobj.\
                                  is_mounted_sample(self._data_model.location)
@@ -438,12 +439,12 @@ class SampleQueueEntry(BaseQueueEntry):
                     try:
                         mount_sample(self.beamline_setup, self._view, self._data_model,
                                      self.centring_done, self.sample_centring_result)
-                    except Exception as e:
+                    except Exception, e:
                         self._view.setText(1, "Error loading")
                         msg = "Error loading sample, please check" +\
-                              " sample changer: " + e.message
+                              " sample changer: %s" % e #.message
                         log.error(msg)
-                        raise QueueExecutionException(e.message, self)
+                        #raise QueueExecutionException(e.message, self)
                 else:
                     log.info("Sample already mounted")
             else:
