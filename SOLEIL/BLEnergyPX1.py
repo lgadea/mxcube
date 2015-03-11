@@ -7,7 +7,7 @@ import os
 import time
 import types
 
-class BLEnergy (Device) :
+class BLEnergyPX1(Device) :
     
     stateEnergy = {'ALARM': 'error',
                    'FAULT': 'error',
@@ -66,7 +66,7 @@ class BLEnergy (Device) :
                      
         self.prev_state = str(value)
         
-        self.emit('stateChanged', BLEnergy.stateEnergy[str(value)])
+        self.emit('stateChanged', BLEnergyPX1.stateEnergy[str(value)])
         
     # function called during polling
     def energyChanged(self,value):
@@ -127,7 +127,8 @@ class BLEnergy (Device) :
             return None
             
     def getCurrentWavelength(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentWavelength", self.name())
+        logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentWavelength", self.name())
+        logging.getLogger("HWR").debug("%s:   self.deviceOk is %s",  (self.name(), self.deviceOk))
         # Pb with the attribute name "lamdda" which is a keyword for python
         if self.deviceOk :           
             # using calculation of the device mono
@@ -253,7 +254,7 @@ class BLEnergy (Device) :
     def moveEnergyCmdStarted(self):
         #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdStarted", self.name())
         self.moving = True
-        self.emit('moveEnergyStarted',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
+        self.emit('moveEnergyStarted',(BLEnergyPX1.stateEnergy[str(self.BLEnergydevice.State())]))
         
     def moveEnergyCmdFailed(self):
         #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFailed", self.name())
@@ -267,7 +268,7 @@ class BLEnergy (Device) :
     def moveEnergyCmdFinished(self):
         #logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFinished", self.name())
         self.moving = False
-        self.emit('moveEnergyFinished',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
+        self.emit('moveEnergyFinished',(BLEnergyPX1.stateEnergy[str(self.BLEnergydevice.State())]))
 
     def getPreviousResolution(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.getPreviousResolution", self.name())
