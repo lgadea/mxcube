@@ -10,6 +10,7 @@ from HardwareRepository import HardwareRepository
 
 import PyTango
 from HardwareRepository.TaskUtils import *
+from PX1Environment import EnvironmentPhase
 
 USER_CLICKED_EVENT = AsyncResult()
 
@@ -80,7 +81,8 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
                       sampy: y_echantillon_real,
                       phiz: z_echantillon_real}
     return centredPos
-  except:
+  except Exception, e:
+    logging.getLogger("HWR").error("MiniDiffPX1: Centring error: %s" % e)
     phi.move(phiSavedPosition)    
     raise
 
@@ -123,6 +125,18 @@ class MiniDiffPX1(MiniDiff):
                 import traceback
                 logging.getLogger().info("MiniDiffPX1.  Cannot load beamstop %s" % str(bs_prop))
                 logging.getLogger().info("    - reason: " + traceback.format_exc())
+
+       px1env_prop=self.getProperty("px1env")
+       self.px1env_ho = None
+
+       if px1env_prop is not None:
+            try:
+                self.px1env_ho=HardwareRepository.HardwareRepository().getHardwareObject(px1env_prop)
+            except:
+                import traceback
+                logging.getLogger().info("MiniDiffPX1.  Cannot load PX1Env %s" % str(px1env_prop))
+                logging.getLogger().info("    - reason: " + traceback.format_exc())
+       self.phase = self.px1env_ho.readPhase()
 
        self.microglide = self.getDeviceByRole('microglide')
        self.guillotine = self.getDeviceByRole('guillotine')
@@ -247,7 +261,10 @@ class MiniDiffPX1(MiniDiff):
 
    def motor_positions_to_screen(self, centred_positions_dict):
 
-       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+       _calibration = self.getCalibrationData(self.zoomMotor.getPosition()) 
+       if _calibration[0] and _calibration[1]:
+           logging.info("ZZ1: got calibration positions")
+           self.pixelsPerMmY, self.pixelsPerMmZ = _calibration 
 
        #phi_angle = math.radians(self.phiMotor.getPosition()-centred_positions_dict["phi"]) 
        phi_angle = math.radians(-self.phiMotor.getPosition()) 
@@ -384,7 +401,12 @@ class MiniDiffPX1(MiniDiff):
 
    def zoomMotorPredefinedPositionChanged(self, positionName, offset):
        logging.info("XX1: zoomMotorPredefinedPositionChanged, OFFSET: %s", offset)       
-       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(offset)
+       
+       _calibration = self.getCalibrationData(self.zoomMotor.getPosition())
+       if _calibration[0] and _calibration[1]:
+           logging.info("ZZ1: got calibration positions")
+           self.pixelsPerMmY, self.pixelsPerMmZ = _calibration
+
        #self.beamPositionX, self.beamPositionY = self.getBeamPosition(offset)
        self.emit('zoomMotorPredefinedPositionChanged', (positionName, offset, ))
 
@@ -470,20 +492,19 @@ class MiniDiffPX1(MiniDiff):
        if not self.permit:
            logging.info("Trying to set centring phase. But no permit to operate")
            return
+       
+       _ready = self.px1env_ho.readyForCentring()
+       logging.info("MiniDiffPX1: readyForCentring = %s" % _ready)
+       if not _ready:
+           self.px1env_ho.setPhase(EnvironmentPhase.CENTRING)
+       else:
+           logging.info("Trying to set centring phase. But already in CENTRING phase.")
+           return
 
-       if self.kappaMotor.getPosition() > 0.01:
-           self.kappaMotor.move(0.)
+       #if self.zoomMotor.getCurrentPositionName() != "Zoom 1":
+       #    self.zoomMotor.moveToPosition("Zoom 1")
 
-       if self.phiMotor.getPosition() > 0.01:
-           self.phiMotor.move(0.)
-
-       if self.zoomMotor.getCurrentPositionName() != "Zoom 1":
-           self.zoomMotor.moveToPosition("Zoom 1")
-
-       if self.lightWago.getState() == "out":
-           self.lightWago.setIn()
-
-       self.phase = "CENTRING"
+       self.phase = self.px1env_ho.readPhase() #"CENTRING"
        self.emit("phaseChanged", (self.phase,))
 
    def setLoadingPhase(self):
@@ -491,32 +512,22 @@ class MiniDiffPX1(MiniDiff):
        if not self.permit:
            logging.info("Trying to set loading phase. But no permit to operate")
            return
+       
+       _ready = self.px1env_ho.readyForManualTransfer()
+       logging.info("MiniDiffPX1: readyForManualTransfer = %s" % _ready)
+       if not _ready:
+           self.px1env_ho.setPhase(EnvironmentPhase.MANUALTRANSFER)
+       else:
+           logging.info("Trying to set loading phase. But already in that phase.")
+           return
 
-       self.guillotine.setIn()
-       self.microglide.home()
-
-       if self.phiMotor.getPosition() != -17.:
-           self.phiMotor.move(-17.)
-
-       if self.kappaMotor.getPosition() != 55.:
-           self.kappaMotor.move(55.)
-
-       if self.zoomMotor.getCurrentPositionName() != "Zoom 1":
-           self.zoomMotor.moveToPosition("Zoom 1")
+       #self.guillotine.setIn()
+       #self.microglide.home()
 
        if self.obx.getShutterState() == "opened":
            self.obx.closeShutter() 
 
-       if self.detectorDistanceMotor:
-           if self.detectorDistanceMotor.getPosition() <= 350:
-               self.detectorDistanceMotor.move(350.)
-
-       if self.lightWago.getState() == "in":
-           self.lightWago.setOut()
-       else:
-           logging.info("not getting out light arm as it was %s" % self.lightWago.getState())
-
-       self.phase = "LOADING"
+       self.phase = self.px1env_ho.readPhase() #"LOADING"
        self.emit("phaseChanged", (self.phase,))
 
 
