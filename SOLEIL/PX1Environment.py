@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Device
 import PyTango
@@ -15,6 +16,7 @@ class EnvironmentPhase:
     FLUOX = 5
     MANUALTRANSFER = 6
     INPROGRESS = 7
+    VISUSAMPLE = 8
 
     phasedesc = {
        "TRANSFER": TRANSFER,
@@ -25,6 +27,7 @@ class EnvironmentPhase:
        "FLUOX": FLUOX,
        "MANUALTRANSFER": MANUALTRANSFER,
        "INPROGRESS": INPROGRESS,
+       "VISUSAMPLE": VISUSAMPLE,
     }
 
     @staticmethod
@@ -32,7 +35,7 @@ class EnvironmentPhase:
         return EnvironmentPhase.phasedesc.get(phasename, None)
 
 class EnvironemntState:
-    UNKNOWN, ON, RUNNING, ALARM, FAULT = (0,1,10,13,14)  # Like PyTango stated
+    UNKNOWN, ON, RUNNING, ALARM, FAULT = (0, 1, 10, 13, 14)  # Like PyTango stated
 
     #TangoStates = { 
     #    Unknown     = 0
@@ -88,7 +91,8 @@ class PX1Environment(Device):
                EnvironmentPhase.DEFAULT: self.device.GoToDefaultPhase,
                # EnvironmentPhase.BEAMVIEW: self.device.GoToBeamViewPhase,
                EnvironmentPhase.FLUOX: self.device.GoToFluoXPhase,
-               EnvironmentPhase.MANUALTRANSFER: self.device.GoToManualTransfertPhase
+               EnvironmentPhase.MANUALTRANSFER: self.device.GoToManualTransfertPhase,
+               EnvironmentPhase.VISUSAMPLE: self.device.GoToVisuSamplePhase
             }
 
     #---- begin state handling
@@ -106,9 +110,9 @@ class PX1Environment(Device):
         return state not in [EnvironmentState.ON,]
 
     def waitReady(self, timeout=None):
-        self._waitState([EnvironmentState.ON,],timeout)
+        self._waitState([EnvironmentState.ON,], timeout)
 
-    def _waitState(self,states,timeout=None):
+    def _waitState(self, states, timeout=None):
         if self.device is None:
             return
 
@@ -163,17 +167,25 @@ class PX1Environment(Device):
             return self.device.readyForTransfert
         else:
             return None
-         
+        
+    def readyForVisuSample(self):
+        if self.device is not None:
+            return self.device.readyForVisuSample
+        else:
+            return None
+ 
     def gotoPhase(self, phase):
+        logging.debug("PX1environment.gotoPhase %s" % phase)
         cmd = self.cmds.get(phase, None)
         if cmd is not None:
+            logging.debug("PX1environment.gotoPhase state %s" % self.readState())
             cmd()
         else:
             return None
          
     def setPhase(self, phase):
         self.gotoPhase(phase) 
-        self.waitPhase(phase, 20)
+        self.waitPhase(phase, 30)
 
     def readPhase(self):
         if self.device is not None:
@@ -211,9 +223,9 @@ def test():
 
     env = hwr.getHardwareObject("/px1environment")
 
-    print "PX1 Environment ",env.isPhaseTransfer()
-    print "       phase is ",env.readPhase()
-    print "       state is ",env.readState()
+    print "PX1 Environment ", env.isPhaseTransfer()
+    print "       phase is ", env.readPhase()
+    print "       state is ", env.readState()
 
     print time.time() - t0
 
