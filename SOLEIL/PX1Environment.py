@@ -83,6 +83,16 @@ class PX1Environment(Device):
             self.chanStatus = self.getChannelObject('State')
             self.chanStatus.connectSignal('update', self.stateChanged)
             logging.getLogger().info('%s: Connected to State channel.', self.name())
+            #state = self.chanStatus.getValue()
+            #logging.getLogger().info('%s: stateChanged to %s' % (self.name(), state))
+	    
+        except KeyError:
+            logging.getLogger().warning('%s: cannot report State', self.name())
+
+        try:
+            self.chanAuth = self.getChannelObject('beamlineMvtAuthorized')
+            self.chanAuth.connectSignal('update', self.setAuthorizationFlag)
+            logging.getLogger().info('%s: Connected to AuthorizationFlag channel.', self.name())
             state = self.chanStatus.getValue()
             logging.getLogger().info('%s: stateChanged to %s' % (self.name(), state))
 	    
@@ -249,6 +259,10 @@ class PX1Environment(Device):
         if not self.readyForManualTransfer():
             self.getCommandObject("GoToManualTransfertPhase")()
 	    time.sleep(0.1)
+
+    def setAuthorizationFlag(self, value):
+        # make here the logic with eventually other permits (like hardware permit)
+        self.emit("operationPermitted", value)
 
 def test():
     import os
