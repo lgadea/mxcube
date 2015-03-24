@@ -3,7 +3,7 @@ from gevent.event import AsyncResult
 from Qub.Tools import QubImageSave
 from HardwareRepository.BaseHardwareObjects import Equipment
 from HardwareRepository.TaskUtils import *
-import Image
+
 import tempfile
 import logging
 import math
