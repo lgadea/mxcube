@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import time
+import logging
+import PyTango
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Device
-import PyTango
-import logging
 import gevent
 
 class EnvironmentPhase:
@@ -76,12 +77,21 @@ class PX1Environment(Device):
 
     def init(self):
               
-        self.device = PyTango.DeviceProxy( self.getProperty("tangoname"))
+        self.device = PyTango.DeviceProxy(self.getProperty("tangoname"))
+        #self.state
+        try:
+            self.chanStatus = self.getChannelObject('State')
+            self.chanStatus.connectSignal('update', self.stateChanged)
+            logging.getLogger().info('%s: Connected to State channel.', self.name())
+            state = self.chanStatus.getValue()
+            logging.getLogger().info('%s: stateChanged to %s' % (self.name(), state))
+	    
+        except KeyError:
+            logging.getLogger().warning('%s: cannot report State', self.name())
 
         if self.device is not None:
-            self.stateChan = self.getChannelObject("state")
-    
-            self.stateChan.connectSignal("update", self.stateChanged)
+            #self.stateChan = self.getChannelObject("State")    
+            #self.stateChan.connectSignal("update", self.stateChanged)
             self.setIsReady(True)
 
             self.cmds = {
@@ -98,34 +108,43 @@ class PX1Environment(Device):
     #---- begin state handling
     #
     def stateChanged(self, value):
-        logging.debug("PX1environment state changed. It is now %s / %s", (str(value), EnvironmentState.tostring(state)))
-        self.emit('stateChanged', (value,))
+        logging.debug("PX1environment state changed. It is now %s", (str(value))) #, EnvironmentState.tostring(value)))
+        logging.debug('%s: stateChanged to %s' % (self.name(), value))
+        self.emit('StateChanged', (value,))
 
     def readState(self):
-        state = self.stateChan.getValue()
+        state = str(self.chanStatus.getValue())
+        #try:
+	#    state = self.device.State()
+        logging.getLogger().info('%s: readState: %s' % (self.name(), state))
         return state 
 
     def isBusy(self, timeout=None):
-        state = stateChan.getValue()
+        #state = self.device.State()
+        state = self.stateChan.getValue()
         return state not in [EnvironmentState.ON,]
 
     def waitReady(self, timeout=None):
-        self._waitState([EnvironmentState.ON,], timeout)
+        logging.debug("PX1environment: waitReady")
+        #self._waitState([EnvironmentState.ON,], timeout)
+        self._waitState(["ON",], timeout)
 
     def _waitState(self, states, timeout=None):
         if self.device is None:
             return
-
+        logging.debug("PX1environment: start _waitState")
+	_debut = time.time()
         with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
             waiting = True
             while waiting:
                 state = self.readState()
                 if state in states:
                     waiting = False
-                gevent.sleep(0.01)
+                gevent.sleep(0.05)
 
     #
     #------- end state handling
+        logging.debug("PX1environment: end _waitState in %.1f sec" % (time.time() - _debut))
 
     #------- begin phase handling
     #
@@ -194,22 +213,42 @@ class PX1Environment(Device):
         else:
             return None
 
-    getPhase = readPhase
+    def getPhase(self):
+        if self.device is not None:
+            phasename = self.device.currentPhase
+            return phasename
+        else:
+            return None
 
     def waitPhase(self, phase,timeout=None):
         if self.device is None:
             return
-
+        logging.debug("PX1environment: start waitPhase")
+	_debut = time.time()
+	n = 0
         with gevent.Timeout(timeout, Exception("Timeout waiting for environment phase")):
             waiting = True
             while waiting:
+	        n += 1
                 _phaseread = self.readPhase()
                 if phase == _phaseread:
                     waiting = False
-                gevent.sleep(0.01)
+                gevent.sleep(0.05)
+        logging.debug("PX1environment: end waitPhase in %.1f sec N= %d" % \
+	                      ((time.time() - _debut), n))
 
     #
     #------- end phase handling
+    
+    def gotoCentringPhase(self):
+        if not self.readyForCentring():
+            self.getCommandObject("GoToCentringPhase")()
+	    time.sleep(0.1)
+
+    def gotoLoadingPhase(self):
+        if not self.readyForManualTransfer():
+            self.getCommandObject("GoToManualTransfertPhase")()
+	    time.sleep(0.1)
 
 def test():
     import os
