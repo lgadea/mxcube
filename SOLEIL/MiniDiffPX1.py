@@ -13,17 +13,19 @@ from HardwareRepository.TaskUtils import *
 from PX1Environment import EnvironmentPhase
 
 USER_CLICKED_EVENT = AsyncResult()
+PHI_ANGLE_INCREMENT = 120
 
 def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
                     beam_xc, beam_yc, kappa, omega):
   global USER_CLICKED_EVENT
   X, Y, PHI = [], [], []
   centredPosRel = {}
-
+  phiSavedPosition = 0
   if all([x.isReady() for x in (phi, phiz, sampx, sampy)]):
     phiSavedPosition = phi.getPosition()
     #phiSavedDialPosition = phi.getDialPosition()
-    phiSavedDialPosition = 327.3
+    #phiSavedDialPosition = 327.3
+    logging.debug("manual_centring: testing motor ready, phiSavedPosition %.1f" % phiSavedPosition)
   else:
     raise RuntimeError, "motors not ready"
   
@@ -39,7 +41,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
       PHI.append(phi.getPosition())
       if len(X) == 3:
         break
-      phi.moveRelative(120)
+      phi.moveRelative(PHI_ANGLE_INCREMENT)
 
     # 2014-01-19-bessy-mh: variable beam position coordinates are passed as parameters
     #beam_xc = imgWidth / 2
@@ -123,7 +125,7 @@ class MiniDiffPX1(MiniDiff):
                 self.bstop_ho=HardwareRepository.HardwareRepository().getHardwareObject(bs_prop)
             except:
                 import traceback
-                logging.getLogger().info("MiniDiffPX1.  Cannot load beamstop %s" % str(bs_prop))
+                logging.getLogger().info("MiniDiffPX1. Cannot load beamstop %s" % str(bs_prop))
                 logging.getLogger().info("    - reason: " + traceback.format_exc())
 
        px1env_prop=self.getProperty("px1env")
@@ -167,9 +169,19 @@ class MiniDiffPX1(MiniDiff):
        #print "phi_position", self.phiMotor.getPosition()
 
    def prepareForAcquisition(self):
-       if self.beamstopIn() == -1:
-           raise Exception("Minidiff cannot get to acquisition mode")
-       self.guillotine.setOut()
+       
+       _ready = self.px1env_ho.readyForCollect()
+       logging.info("MiniDiffPX1: readyForCollect = %s" % _ready)
+       if not _ready:
+           self.px1env_ho.setPhase(EnvironmentPhase.COLLECT)
+       else:
+           logging.info("Trying to set COLLECT phase. But already in that phase.")
+
+       self.phase = self.px1env_ho.readPhase() #"COLLECT"
+       self.emit("phaseChanged", (self.phase,))
+       #if self.beamstopIn() == -1:
+       #    raise Exception("Minidiff cannot get to acquisition mode")
+       #self.guillotine.setOut()
 
    def SCauthorizationChanged(self, value):
        self.setAuthorizationFlag("samplechanger", value)
@@ -209,7 +221,7 @@ class MiniDiffPX1(MiniDiff):
        pass
 
    def getState(self):
-       logging.info("XX1 getState")
+       #logging.info("XX1 getState")
        print "phi_position", self.phiMotor.getPosition()
        return "STANDBY"
 
@@ -236,7 +248,7 @@ class MiniDiffPX1(MiniDiff):
        return (self.calib_x or 0, self.calib_y or 0)
 
    def getCalibrationData(self, offset):
-       logging.info("XX1: getCalibration, OFFSET: %s", offset)
+       #logging.info("XX1: getCalibration, OFFSET: %s", offset)
 
        if self.lightMotor is None or self.lightMotor.positionChan.device is None:
            logging.info("XX1: getCalibration, Not yet initialized")
@@ -263,7 +275,7 @@ class MiniDiffPX1(MiniDiff):
 
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition()) 
        if _calibration[0] and _calibration[1]:
-           logging.info("ZZ1: got calibration positions")
+           #logging.info("ZZ1: got calibration positions")
            self.pixelsPerMmY, self.pixelsPerMmZ = _calibration 
 
        #phi_angle = math.radians(self.phiMotor.getPosition()-centred_positions_dict["phi"]) 
@@ -288,8 +300,8 @@ class MiniDiffPX1(MiniDiff):
        beam_pos_y = self.getBeamPosY()
        logging.info("   - phi angle = %s " %  phi_angle)
        logging.info("   - phiz saved = %s " % centred_positions_dict["phiz"])
-       logging.info("   - pixels per mm X = %s " % self.pixelsPerMmY )
-       logging.info("   - pixels per mm Y = %s " % self.pixelsPerMmZ )
+       #logging.info("   - pixels per mm X = %s " % self.pixelsPerMmY )
+       #logging.info("   - pixels per mm Y = %s " % self.pixelsPerMmZ )
        logging.info("   - dx = %s ( %s - %s )" % (dx , centred_positions_dict["sampx"],self.sampleXMotor.getPosition()) )
        logging.info("   - dy = %s ( %s - %s )" % ( dy , centred_positions_dict["sampy"],self.sampleYMotor.getPosition())  )
        logging.info("   - dz = %s " % dz )
@@ -366,6 +378,7 @@ class MiniDiffPX1(MiniDiff):
            raise RuntimeError("Motors not ready")
 
        if phipos is not None:
+           logging.info("WW1: phiMotor_move_to %s" % phipos)
            self.phiMotor.move( phipos )
 
        uglide_pos = [ sampxpos, sampypos, phizpos ]
@@ -393,18 +406,18 @@ class MiniDiffPX1(MiniDiff):
             logging.exception("Could not move to centred position")
             self.emitCentringFailed()
           else:
-            self.phiMotor.syncMoveRelative(-180)
+            self.phiMotor.syncMoveRelative(-2*PHI_ANGLE_INCREMENT)
           logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
           self.emitCentringSuccessful()
           self.emitProgressMessage("")
 
    def zoomMotorPredefinedPositionChanged(self, positionName, offset):
-       logging.info("XX1: zoomMotorPredefinedPositionChanged, OFFSET: %s", offset)       
+       #logging.info("XX1: zoomMotorPredefinedPositionChanged, OFFSET: %s", offset)       
        
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition())
        if _calibration[0] and _calibration[1]:
-           logging.info("ZZ1: got calibration positions")
+           #logging.info("ZZ1: got calibration positions")
            self.pixelsPerMmY, self.pixelsPerMmZ = _calibration
 
        #self.beamPositionX, self.beamPositionY = self.getBeamPosition(offset)
@@ -468,7 +481,7 @@ class MiniDiffPX1(MiniDiff):
        while not all([m.getState() == m.READY for m in motor.itervalues()]):
            time.sleep(0.1)
 
-   def takeSnapshots(self, wait=False):
+   def takeSnapshots(self, image_count, wait=False):
         self.camera.forceUpdate = True
 
         # try:
@@ -478,7 +491,7 @@ class MiniDiffPX1(MiniDiff):
         # if not centring_valid:
         #     logging.getLogger("HWR").error("MiniDiff: you must centre the crystal before taking the snapshots")
         # else:
-        snapshotsProcedure = gevent.spawn(take_snapshots, self.lightWago, self.lightMotor ,self.phiMotor,self.zoomMotor,self._drawing)
+        snapshotsProcedure = gevent.spawn(take_snapshots, image_count, self.px1env_ho, self.phiMotor, self._drawing)
         self.emit('centringSnapshots', (None,))
         self.emitProgressMessage("Taking snapshots")
         self.centringStatus["images"]=[]
@@ -529,57 +542,37 @@ class MiniDiffPX1(MiniDiff):
 
        self.phase = self.px1env_ho.readPhase() #"LOADING"
        self.emit("phaseChanged", (self.phase,))
+        
 
-
-def take_snapshots(light, light_motor, phi, zoom, drawing):
+def take_snapshots(number_of_snapshots, px1env, phi, drawing):
 
   centredImages = []
 
   logging.getLogger("HWR").info("PX1 take snapshots")
 
-  if light is not None:
+  if px1env is not None:
 
     logging.getLogger("HWR").info("take snapshots:  putting the light in")
-    light.wagoIn()
+    _ready = px1env.readyForVisuSample()
+    logging.info("MiniDiffPX1: readyForManualTransfer = %s" % _ready)
+    if not _ready:
+        px1env.setPhase(EnvironmentPhase.VISUSAMPLE)
+    else:
+        logging.info("Trying to set visusample phase. But already in that phase.")
 
-    zoom_level  = zoom.getPosition()
-    light_level = light_motor.getPosition()
-    logging.getLogger("HWR").info("take snapshots:  zoom level is %s / light level is %s" % (str(zoom_level), str(light_level)))
+  #for i in range(4):
+  #   logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
+  #   centredImages.append((phi.getPosition(),str(myimage(drawing))))
+  #   if i < 3:
+  #      phi.syncMoveRelative(-90)
+  #   time.sleep(2)
 
-    # No light level, choose default
-    if light_motor.getPosition() == 0:
-
-       light_level = None
-
-       logging.getLogger().info("take snapshots: looking for default light level for this zoom ")
-       for position in zoom['positions']:
-          try:
-              offset = position.offset
-              logging.getLogger().info("take snapshots: zoom-level is: %s / comparing with table position: %s " % (str(zoom_level), str(offset)))
-              if int(offset) == int(zoom_level):
-                 light_level = position['ligthLevel']
-                 logging.getLogger().info("take snapshots - light level for zoom position %s is %s" % (str(zoom_level),str(light_level)))
-          except IndexError:
-              pass
-
-       if light_level:
-          light_motor.move(light_level)
-
-    t0 = time.time(); timeout = 5
-
-    while light.getWagoState() != "in":
-      time.sleep(0.5)
-      if (time.time() - t0) > timeout:
-          raise Exception("SnapshotException","Timeout while inserting light")
-
-  for i in range(4):
+  for i, angle in enumerate([-90]*number_of_snapshots):
      logging.getLogger("HWR").info("MiniDiff: taking snapshot #%d", i+1)
      centredImages.append((phi.getPosition(),str(myimage(drawing))))
-     if i < 3:
-        phi.syncMoveRelative(-90)
-     time.sleep(2)
-  #phi.syncMoveRelative(270)
-
+     if i < (number_of_snapshots-1):
+        phi.syncMoveRelative(angle)
+  
   centredImages.reverse() # snapshot order must be according to positive rotation direction
 
   return centredImages
