@@ -116,7 +116,8 @@ class PX1Cats(SampleChanger):
                              "_chnSoftAuth",  \
                              "_chnPathRunning", "_chnMessage", \
                              "_chnNumLoadedSample", "_chnLidLoadedSample", \
-                             "_chnSampleBarcode", "_chnSampleIsDetected"):
+                             "_chnSampleBarcode", "_chnSampleIsDetected",
+			     "_chnDryAndSoakNeeded"):
             setattr(self, channel_name, self.getChannelObject(channel_name))
            
         self._chnLidState.connectSignal("update", self._updateLidState)
@@ -301,6 +302,13 @@ class PX1Cats(SampleChanger):
                 self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
         else:
                 self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
+	
+	# Check the value of the CATSCRYOTONG attribute dryAndSoakNeeded to warn user if it is True
+	dryAndSoak = self._chnDryAndSoakNeeded.getValue()
+        logging.info("PX1Cats. dryAndSoak %s" % dryAndSoak)
+	if dryAndSoak:
+	    logging.getLogger('user_level_log').warning("CATS: It is recommended to Dry_and_Soak the gripper.")
+	
             
     def _doUnload(self,sample_slot=None):
         """
@@ -764,7 +772,11 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        self._executeServerTask(self._cmdHomeOpen, "HomeOpen")
+        try:
+	    self._executeServerTask(self._cmdHomeOpen, "HomeOpen")
+	except Exception, e:
+	    logging.warning("PX1Cats: _doHomeOpen %s" % e)
+	    logging.getLogger('user_level_log').warning("CATS: Sample already mounted, use UNLOAD before HOME/OPEN.")
 
     def _doSoak(self):
         """
@@ -828,7 +840,10 @@ class PX1Cats(SampleChanger):
 
     def _updateRegulationState(self, value=None):
         if value is None:
-             value = self._chnSafeNeeded.getValue()
+# Modif Patrick le 18/03/2015
+# Correction probleme sur etat de la regulation qui reste en rouge
+#             value = self._chnSafeNeeded.getValue()
+             value = self._chnLN2Regulation.getValue()
 
         if self._ln2regul != value:
              self._ln2regul = value
