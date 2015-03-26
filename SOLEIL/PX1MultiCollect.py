@@ -14,6 +14,32 @@ import socket
 from PyTango import DeviceProxy
 from collections import namedtuple
 
+# PL.
+def make_dir(dirname):    
+    try:
+        os.mkdir(dirname)
+        os.chmod(dirname, 0777)
+    except OSError:
+        pass
+    except Exception, err:
+        print "Error in creating process directory %s:" % dirname, err
+
+def make_process_dir(dirname):
+    _pdir = os.path.join(dirname, "process")
+    make_dir(_pdir)
+
+def write_goimg(path):
+    dirname = "/data/log/.goimg"
+    db = "goimg.db"
+    db_f = os.path.join(dirname,db)
+    if db in os.listdir(dirname):
+        os.remove(db_f)
+    dbo = open(db_f, "w")
+    dbo.write(path)
+    dbo.close()
+    os.chmod(db_f, 0777)
+#/ PL.
+
 class TunableEnergy:
     # self.bl_control is passed by PX1MultiCollect
     @task
@@ -30,7 +56,13 @@ class TunableEnergy:
         return self.bl_control.energy.getCurrentEnergy()
 
     def get_wavelength(self):
-        return self.bl_control.energy.getCurrentWavelength()
+        logging.info( "PX1Multicollect: bl_control.energy dir= %s" % dir(self.bl_control.energy))
+        wavlen = self.bl_control.energy.getCurrentWavelength()
+	if wavlen:
+            logging.info( "PX1Multicollect: wavlen YES %.5f %s" % (wavlen, type(wavlen)))
+	else:
+            logging.info( "PX1Multicollect: wavlen NO  %s %s" % (wavlen, type(wavlen)))           
+        return wavlen
 
 class PixelDetector:
     def __init__(self):
@@ -67,6 +99,11 @@ class PixelDetector:
 
         dist   = self.bl_control.detector_distance.getPosition()
         wavlen = self.bl_control.energy.getCurrentWavelength()
+        logging.info( "PX1Multicollect: bl_control.energy dir= %s" % dir(self.bl_control.energy))
+	if wavlen:
+            logging.info( "PX1Multicollect: wavlen %.5f %s" % (wavlen, type(wavlen)))
+	else:
+            logging.info( "PX1Multicollect: wavlen %s %s" % (wavlen, type(wavlen)))           
         kappa_angle = self.kappa_hwo.getPosition()
 
         _settings = [
@@ -389,8 +426,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         self.emit("collectReady", (True, ))
 
     @task
-    def take_crystal_snapshots(self):
-        self.bl_control.diffractometer.takeSnapshots(wait=True)
+    def take_crystal_snapshots(self, image_count=2):
+        self.bl_control.diffractometer.takeSnapshots(image_count, wait=True)
 
     @task
     def data_collection_hook(self, data_collect_parameters):
@@ -409,6 +446,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     @task
     def set_resolution(self, new_resolution):
+        logging.info("<PX1 MultiCollect> TEST - set_resolution")
         return self.bl_control.resolution.move(new_resolution)
         
     @task
@@ -606,8 +644,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
         radius = self.bl_config.detector_radius  / 1000.0 # meters
         detdist =  self.get_detector_distance() / 1000.0 # meters
-        wavelength = self.get_wavelength() # amstrongs
-
+        wavelength = self.get_wavelength() # angtroms
+        logging.info("<PX1 MultiCollect> get resolution at corner: w: %s detdist: %s radius: %s"% (wavelength, detdist, radius))
         angle = math.atan( math.sqrt(2)*radius/detdist) 
         resatcorner = wavelength / (2*math.sin(0.5*angle))
         return resatcorner
