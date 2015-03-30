@@ -67,7 +67,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
     x_echantillon=(p01+p02+p03)/3.0
     y_echantillon=(q01+q02+q03)/3.0
     z_echantillon=(-dx1-dx2-dx3)/3.0
-    print "Microglide X = %d :    Y = %d :    Z = %d : " %(x_echantillon,y_echantillon,z_echantillon)
+    #print "Microglide X = %d :    Y = %d :    Z = %d : " %(x_echantillon,y_echantillon,z_echantillon)
         
     x_echantillon_real=1000.*x_echantillon/pixelsPerMmY + sampx.getPosition()
     y_echantillon_real=1000.*y_echantillon/pixelsPerMmY + sampy.getPosition()
@@ -75,7 +75,6 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
 
     if (z_echantillon_real + phiz.getPosition() < phiz.getLimits()[0]) :
         logging.getLogger("HWR").error("loop too long")
-        print 'loop too long '
         centredPos = {}
         phi.move(phiSavedPosition)            
     else :    
@@ -97,7 +96,7 @@ def move_to_centred_position(centred_pos):
        pos_to_go.append(pos)
        if motor.name() in ["/uglidex", "/uglidey"]:
            moveXYZ = motor.getCommandObject("moveAbsoluteXYZ")
-     print "POS_TO_GO: %8.2f %8.2f %8.2f" % tuple(pos_to_go)
+     #print "POS_TO_GO: %8.2f %8.2f %8.2f" % tuple(pos_to_go)
      moveXYZ(pos_to_go)
    
      with gevent.Timeout(15):
@@ -265,8 +264,8 @@ class MiniDiffPX1(MiniDiff):
                        self.beam_yc = float(calibrationData.beamPositionY)
                        self.light_level = float(position.lightLevel)
                        self.lightMotor.move(self.light_level)
-                       print "CALIBR:", (self.calib_x, self.calib_y)
-                       print "BEAMXY:", (self.beam_xc, self.beam_yc)
+                       #print "CALIBR:", (self.calib_x, self.calib_y)
+                       #print "BEAMXY:", (self.beam_xc, self.beam_yc)
                        return (self.calib_x or 0, self.calib_y or 0)
 
        return (None, None)
