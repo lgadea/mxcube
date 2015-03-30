@@ -85,6 +85,8 @@ class PixelDetector:
             self.shutterless_exptime = (exptime + 0.003)*number_of_images
         logging.info("<PX1 MultiCollect> TODO - prepare acquisition")
 
+        # PL 2015_01_23 For ADXV visualisation.
+        self.connectVisualisation()
 
         self.prepare_detector_header(take_dark, start, osc_range, exptime, npass, number_of_images, comment)
 
@@ -254,7 +256,7 @@ class PixelDetector:
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
-        adxv_send_fmt = "\nload_image %s  " + "\n"+ chr(32)
+        adxv_send_fmt = "\nload_image %s" + "\n"+ chr(32)
         logging.info(" ADXV_send_fmt")
         logging.info(adxv_send_fmt % imgname)
         
@@ -262,18 +264,20 @@ class PixelDetector:
             if not self.adxv_socket:
                 try:
                     self.connectVisualisation()
-                except:
+                except Exception, err:
                     self.adxv_socket = None
                     logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
+                    logging.error("ADXV0: msg= %s" % err)
             else:
                 print "adxv_send_fmt % self.current_filename"
-                self.adxv_socket.send(adxv_send_fmt % self.current_filename)
+                self.adxv_socket.send(adxv_send_fmt % imgname)
         except:
             try:
                del self.adxv_socket
                self.connectVisualisation()
-            except:
+            except Exception, err:
                self.adxv_socket = None
+               logging.error("ADXV1: msg= %s" % err)
       
     def stop_acquisition(self):
         logging.info("<PX1 MultiCollect>  stopping acquisition ")
@@ -295,6 +299,25 @@ class PixelDetector:
            logging.info("<PX1 MultiCollect>  stopping collect server ")
            self.collectServer.Stop()
 
+    def connectVisualisation(self):
+        # For ADXV visu (PL 2015_01_23).
+        #os.system("killall adxv_follow")
+        #_cl = "gnome-terminal --title ADXV_TERM "
+        #_cl += " --geometry=132x30+1680+5 -e adxv_follow &"
+        #os.system(_cl)
+        #time.sleep(1.)
+        adxv_host = '127.0.0.1'
+        adxv_port = 8100
+
+        try:
+            res = socket.getaddrinfo(adxv_host, adxv_port, 0, socket.SOCK_STREAM)
+            af, socktype, proto, canonname, sa = res[0]
+            self.adxv_socket = socket.socket(af, socktype, proto)
+            self.adxv_socket.connect((adxv_host, adxv_port))
+            logging.getLogger().info("ADXV OK.") 
+        except:
+            self.adxv_socket = None
+            logging.getLogger().info("WARNING: Can't connect to ADXV.")
 
 class PilatusDetector(PixelDetector):
     pass
@@ -369,10 +392,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
           undulators = bcm_pars["undulator"]
         except IndexError:
           undulators = []
-    
-        # PL 2015_01_23 For ADXV visualisation.
-        self.connectVisualisation()
-        
+            
         self.setBeamlineConfiguration(directory_prefix = self.getProperty("directory_prefix"),
                                       default_exposure_time = bcm_pars.getProperty("default_exposure_time"),
                                       default_number_of_passes = bcm_pars.getProperty("default_number_of_passes"),
@@ -472,7 +492,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
                 break
 
     def set_helical(self, onmode, positions=None):
-        logging.info("<PX1 MultiCollect> set helical")
+        #logging.info("<PX1 MultiCollect> set helical")
         self.helical = onmode
         if onmode:
             logging.info("<PX1 MultiCollect> set helical pos1 %s pos2 %s" % (positions['1'], positions['2']))
@@ -480,8 +500,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             self.helicalFinal = positions['2']
 
     def set_collect_position(self, position):
-        logging.info("<PX2 MultiCollect> set collect position %s" % position)
-        logging.info("<PX2 MultiCollect> set collect position type %s" % type(position))
+        logging.info("<PX1 MultiCollect> set collect position %s" % position)
+        logging.info("<PX1 MultiCollect> set collect position type %s" % type(position))
         self.standard_collect = True
         #pos = dict(position)
         #collect_position = {} 
@@ -794,26 +814,6 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         sync_file = time.strftime("%Y_%m_%d-%H_%M_%S", time.localtime(time.time()))
         sync_file_path = os.path.join( self.ruche_sync_dir, sync_file )
         open(sync_file_path,"w").write( ruche_info )
-
-    def connectVisualisation(self):
-        # For ADXV visu (PL 2015_01_23).
-        #os.system("killall adxv_follow")
-        #_cl = "gnome-terminal --title ADXV_TERM "
-        #_cl += " --geometry=132x30+1680+5 -e adxv_follow &"
-        #os.system(_cl)
-        #time.sleep(1.)
-        adxv_host = '127.0.0.1'
-        adxv_port = 8100
-
-        try:
-            res = socket.getaddrinfo(adxv_host, adxv_port, 0, socket.SOCK_STREAM)
-            af, socktype, proto, canonname, sa = res[0]
-            self.adxv_socket = socket.socket(af, socktype, proto)
-            self.adxv_socket.connect((adxv_host, adxv_port))
-            logging.getLogger().info("ADXV OK.") 
-        except:
-            self.adxv_socket = None
-            logging.getLogger().info("WARNING: Can't connect to ADXV.")
 
 def test():
     import os
