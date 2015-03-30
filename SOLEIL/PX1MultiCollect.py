@@ -266,7 +266,7 @@ class PixelDetector:
                     self.adxv_socket = None
                     logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
             else:
-                print "dxv_send_fmt % self.current_filename"
+                print "adxv_send_fmt % self.current_filename"
                 self.adxv_socket.send(adxv_send_fmt % self.current_filename)
         except:
             try:

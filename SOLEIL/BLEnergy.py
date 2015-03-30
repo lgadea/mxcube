@@ -141,7 +141,9 @@ class BLEnergy (Device) :
             return None
             
     def getCurrentWavelength(self):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentWavelength", self.name())
+        logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentWavelength", self.name())
+        logging.getLogger("HWR").debug("   BLEnergy deviceOk %s", self.deviceOk)
+        logging.getLogger("HWR").debug("   BLEnergy mono.wavel  %.5f", self.monodevice.read_attribute("lambda").value)
         # Pb with the attribute name "lamdda" which is a keyword for python
         if self.deviceOk :           
             # using calculation of the device mono
