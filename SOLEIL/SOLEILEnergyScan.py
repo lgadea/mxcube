@@ -70,6 +70,8 @@ class SOLEILEnergyScan(Equipment):
                 logging.getLogger("HWR").warning('EnergyScan: you should specify the xanes hardware object')
 
             self.energyMotor=self.getObjectByRole("energy")
+            if self.energyMotor is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the energy hardware object')
             self.resolutionMotor=self.getObjectByRole("resolution")
             self.previousResolution=None
             self.lastResolution=None
@@ -466,7 +468,9 @@ class SOLEILEnergyScan(Equipment):
 
     def get_value(self):
         return self.getCurrentEnergy()
-    
+
+    def getPosition(self):
+        return self.getCurrentEnergy()    
     
     def getEnergyLimits(self):
         lims=None
@@ -483,6 +487,7 @@ class SOLEILEnergyScan(Equipment):
                 logging.getLogger("HWR").exception("EnergyScan: couldn't read energy")
                 return None
         else:
+            logging.getLogger("HWR").exception("EnergyScan: self.energyMotor not defined !")
             return self.defaultWavelength
     
     def getWavelengthLimits(self):

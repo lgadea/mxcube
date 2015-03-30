@@ -64,6 +64,7 @@ class TangoLightPX1(Device):
         self.emit('wagoStateChanged', (self.currentState, ))
         
     def getWagoState(self):
+        logging.getLogger("HWR").info('TangoLightPX1. getWagoState: %s' % self.currentState)
         return self.currentState 
 
     def getState(self):
