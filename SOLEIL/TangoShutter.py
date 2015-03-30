@@ -70,8 +70,8 @@ class TangoShutter(BaseHardwareObjects.Device):
     def __init__(self, name):
         BaseHardwareObjects.Device.__init__(self, name)
         #debug MS 10.09.12
-        print 'TangoShutter.py: __init__ print name',name
-        print self
+        #print 'TangoShutter.py: __init__ print name',name
+        #print self
         
     def init(self):
         self.shutterStateValue = 'UNKNOWN'
