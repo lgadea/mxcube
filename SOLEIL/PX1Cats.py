@@ -117,7 +117,7 @@ class PX1Cats(SampleChanger):
                              "_chnPathRunning", "_chnMessage", \
                              "_chnNumLoadedSample", "_chnLidLoadedSample", \
                              "_chnSampleBarcode", "_chnSampleIsDetected",
-			     "_chnDryAndSoakNeeded"):
+			     "_chnDryAndSoakNeeded", "_chnIncoherentGonioSampleState"):
             setattr(self, channel_name, self.getChannelObject(channel_name))
            
         self._chnLidState.connectSignal("update", self._updateLidState)
@@ -128,13 +128,14 @@ class PX1Cats(SampleChanger):
         self._chnSoftAuth.connectSignal("update", self._softwareAuthorization) 
         self._chnPathRunning.connectSignal("update", self._updateRunningState)
         self._chnMessage.connectSignal("update", self._updateMessage)
+        self._chnIncoherentGonioSampleState.connectSignal("update", self._updateAckSampleMemory)
 
         for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             channel_name = "_chnBasket%dState" % (basket_index + 1)
             setattr(self, channel_name, self.getChannelObject(channel_name))
 
         for command_name in ("_cmdAbort", "_cmdLoad", "_cmdUnload", "_cmdChainedLoad", \
-                             "_cmdReset", "_cmdSafe", "_cmdClearMemory", "_cmdPowerOn", "_cmdPowerOff", \
+                             "_cmdReset", "_cmdSafe", "_cmdClearMemory", "_cmdAckSampleMemory", "_cmdPowerOn", "_cmdPowerOff", \
                              "_cmdOpenLid", "_cmdCloseLid", "_cmdDrySoak", "_cmdSoak", "_cmdRegulOn", "_cmdRegulOff"):
             setattr(self, command_name, self.getCommandObject(command_name))
 
@@ -308,7 +309,12 @@ class PX1Cats(SampleChanger):
         logging.info("PX1Cats. dryAndSoak %s" % dryAndSoak)
 	if dryAndSoak:
 	    logging.getLogger('user_level_log').warning("CATS: It is recommended to Dry_and_Soak the gripper.")
-	
+
+	incoherentSample = self._chnIncoherentGonioSampleState.getValue()
+        logging.info("PX1Cats. dryAndSoak %s" % incoherentSample)
+	if incoherentSample:
+            #logging.getLogger("user_level_log").info("CATS: Load/Unload Error. Please try again.")
+            self.emit('loadError', incoherentSample)
             
     def _doUnload(self,sample_slot=None):
         """
@@ -718,6 +724,15 @@ class PX1Cats(SampleChanger):
         """
         self._cmdClearMemory()
 
+    def _doAckSampleMemory(self):
+        """
+        Launch the "AckIncoherentGonioSampleState" command on the CATS Tango DS
+
+        :returns: None
+        :rtype: None
+        """
+        self._cmdAckSampleMemory()
+
     def _doDrySoak(self):
         """
         Launch the "DrySoak" command on the CATS Tango DS
@@ -881,5 +896,16 @@ class PX1Cats(SampleChanger):
 
         if value != self._lidState:
             self.emit('lidStateChanged', (not value, ))
+
+    def _updateAckSampleMemory(self, value=None):
+        logging.info("PX1Cats1. UpdateAckSampleMemory: %s" % value)
+        if value is None:
+            value = self._chnIncoherentGonioSampleState.getValue()
+            logging.info("PX1Cats2. UpdateAckSampleMemory: %s" % value)
+
+        if value:
+            self.emit('loadError', value)
+        
+	self._incoherentGonioSampleState = value
 
 
