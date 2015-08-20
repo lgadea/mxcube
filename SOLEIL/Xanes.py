@@ -40,10 +40,12 @@ class Xanes(BaseHardwareObjects.Device):
                  undulatorOffset=0.,
                  filterNumber=7,
                  transmission=1.,
+                 testFile='/927bis/ccd/gitRepos/Scans/pychooch/examples/SeFoil.raw',
                  transmission_min=0.001,
                  transmission_max=0.05,
                  epsilon=1e-4,
                  channelToeV=10.,
+                 test=True,
                  save=True,
                  plot=True,
                  expert=False):

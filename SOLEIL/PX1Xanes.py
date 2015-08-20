@@ -49,7 +49,7 @@ class PX1Xanes(Xanes):
         self.Ps_v.gap = newGapFP_V
 
     def safeOpenSafetyShutter(self):
-
+	return
         logging.info('Opening the safety shutter -- checking the hutch PSS state')
 
         if self.test:

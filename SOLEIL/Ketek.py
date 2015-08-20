@@ -107,6 +107,13 @@ class Ketek(BaseHardwareObjects.Device):
     def set_roi(self,chbeg=0,chend=2048):
         self.dev.SetROIs( numpy.array((chbeg, chend)) )
 
+    def set_roi_kev(self,ebeg,eend):
+        ebeg += self.calib_a
+        eend += self.calib_a
+        chbeg = int(ebeg / (self.calib_b)) 
+        chend = int(eend / (self.calib_b)) 
+        self.dev.SetROIs( numpy.array((chbeg, chend)) )
+
     def start(self):
         self.dev.Start()
 

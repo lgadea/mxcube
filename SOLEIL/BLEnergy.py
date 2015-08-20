@@ -221,6 +221,7 @@ class BLEnergy (Device) :
             try :
                 # Envoi a l'energie desiree    
                 self.BLEnergydevice.energy = value
+		return value
             except :           
                 logging.getLogger("HWR").error("%s: Cannot move BLEnergy : State device = %s", self.name(), str( self.BLEnergydevice.State() ))
         
@@ -238,6 +239,7 @@ class BLEnergy (Device) :
         self.monodevice.simLambda = value
         self.startMoveEnergy(self.monodevice.simEnergy)
 #        return self.startMoveEnergy(energy_val)
+	return value
     
     def cancelMoveEnergy(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.cancelMoveEnergy", self.name())
