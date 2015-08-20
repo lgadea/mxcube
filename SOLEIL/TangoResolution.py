@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import math
 import logging
 import time
@@ -7,7 +8,7 @@ from PyTango import DeviceProxy
 
 from HardwareRepository import BaseHardwareObjects
 from HardwareRepository import HardwareRepository
-#from SpecClient import SpecCommand
+
 # Changed for PILATUS 6M
 DETECTOR_DIAMETER = 424.
 # specState = {
@@ -36,6 +37,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
     stateDict = {
          "UNKNOWN": 0,
          "ALARM":   1,
+         "OFF":     1,
          "STANDBY": 2,
          "RUNNING": 4,
          "MOVING":  4,
@@ -52,7 +54,6 @@ class TangoResolution(BaseHardwareObjects.Equipment):
         self.connect("equipmentNotReady", self.equipmentNotReady)
         self.device = DeviceProxy( self.getProperty("tangoname") )
         
-        #self.monodevice = SimpleDevice(self.getProperty("tangoname2"), waitMoves = False, verbose=False)
         self.blenergyHOname = self.getProperty("BLEnergy")
         if self.blenergyHOname is None:
             logging.getLogger("HWR").error('TangoResolution: you must specify the %s hardware object' % self.blenergyHOname)
@@ -70,6 +71,11 @@ class TangoResolution(BaseHardwareObjects.Equipment):
         positChan.connectSignal("update", self.positionChanged)
         stateChan = self.getChannelObject("state") # utile seulement si statechan n'est pas defini dans le code
         stateChan.connectSignal("update", self.stateChanged)
+
+        try:
+            self.light_dev = DeviceProxy( self.getProperty("tangoname_lightpos"))
+        except:
+            logging.getLogger("HWR").error("%s: unknown device name", self.getProperty("tangoname_lightpos"))
         
         self.currentDistance = self.device.position
         self.currentEnergy = self.blenergyHO.getCurrentEnergy()
@@ -94,6 +100,10 @@ class TangoResolution(BaseHardwareObjects.Equipment):
     
     def positionChanged(self, value):
         res = self.dist2res(value)
+        try:
+            logging.getLogger("HWR").debug("%s: TangoResolution.positionChanged: %.3f", self.name(), res)
+        except:
+            logging.getLogger("HWR").error("%s: TangoResolution not responding, %s", self.name(), '')       
         self.emit('positionChanged', (res,))
 
     
@@ -138,6 +148,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
     def newResolution(self, res):      
         if self.currentResolution is None:
             self.currentResolution = self.recalculateResolution()
+        logging.getLogger().info("new resolution = %.3f" % res)
         self.currentResolution = res
         self.emit("positionChanged", (res, ))
     
@@ -145,7 +156,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
         #logging.getLogger("HWR").debug("%s: TangoResolution.connectNotify, : %s", \
         #                                                  self.name(), signal)
         if signal == "stateChanged":
-            self.stateChanged(TangoResolution.stateDict[self.device.State])
+            self.stateChanged(TangoResolution.stateDict[str(self.device.State())])
         
         elif signal == 'positionChanged':
             self.positionChanged(self.device.position)
@@ -221,11 +232,20 @@ class TangoResolution(BaseHardwareObjects.Equipment):
 
     def move(self, res):
         self.currentWavelength = self.blenergyHO.getCurrentWavelength()
+        #print "HHHHHHHHHH   self.light_dev.State = ", self.light_dev.State
+        #print "dist_to_go =", self.res2dist(res)
+        logging.info("%s: TangoResolution.move. wave: %s" % (self.name(), self.currentWavelength))
+        if str(self.light_dev.State()) == "INSERT":
+            try:
+                self.light_dev.Extract()
+                time.sleep(2)
+            except:
+                return (False,"Error while trying to extract the light arm!")
         self.device.position = self.res2dist(res)
 
     def newDistance(self, dist):
+        logging.info("%s: TangoResolution.newDistance. dist: %s" % (self.name(), dist)) 
         self.device.position = dist
-
 
     def stop(self):
         try:
