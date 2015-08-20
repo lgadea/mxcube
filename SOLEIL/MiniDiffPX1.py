@@ -73,7 +73,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
     y_echantillon_real=1000.*y_echantillon/pixelsPerMmY + sampy.getPosition()
     z_echantillon_real=1000.*z_echantillon/pixelsPerMmY + phiz.getPosition()
 
-    if (z_echantillon_real + phiz.getPosition() < phiz.getLimits()[0]) :
+    if (z_echantillon_real + phiz.getPosition() < phiz.getLimits()[0]*2) :
         logging.getLogger("HWR").error("loop too long")
         centredPos = {}
         phi.move(phiSavedPosition)            
@@ -172,6 +172,9 @@ class MiniDiffPX1(MiniDiff):
        _ready = self.px1env_ho.readyForCollect()
        logging.info("MiniDiffPX1: readyForCollect = %s" % _ready)
        if not _ready:
+           with gevent.Timeout(100):
+               while not self.px1env_ho.readState() == "ON":
+                   time.sleep(0.05)
            self.px1env_ho.setPhase(EnvironmentPhase.COLLECT)
        else:
            logging.info("Trying to set COLLECT phase. But already in that phase.")
@@ -346,11 +349,15 @@ class MiniDiffPX1(MiniDiff):
 
        phipos = None
        if type(cent_pos) is dict:
-           sampxpos = cent_pos[self.sampleXMotor]
-           sampypos = cent_pos[self.sampleYMotor]
-           phizpos = cent_pos[self.phizMotor]
-           if 'phi' in cent_pos.keys():
-              phipos = cent_pos[self.phiMotor]
+           try:
+               sampxpos = cent_pos[self.sampleXMotor]
+               sampypos = cent_pos[self.sampleYMotor]
+               phizpos = cent_pos[self.phizMotor]
+               if 'phi' in cent_pos.keys():
+                  phipos = cent_pos[self.phiMotor]
+           except Exception, err:
+               logging.error("MiniDiffPX1.moveToCentredPosition: %s" % err)
+	       raise Exception     
        else:
            sampxpos = cent_pos.sampx
            sampypos = cent_pos.sampy
@@ -553,9 +560,13 @@ def take_snapshots(number_of_snapshots, px1env, phi, drawing):
 
     logging.getLogger("HWR").info("take snapshots:  putting the light in")
     _ready = px1env.readyForVisuSample()
+    
     logging.info("MiniDiffPX1: readyForManualTransfer = %s" % _ready)
     if not _ready:
-        px1env.setPhase(EnvironmentPhase.VISUSAMPLE)
+        with gevent.Timeout(15):
+            while not px1env.readState() == "ON":
+                time.sleep(0.05)
+            px1env.setPhase(EnvironmentPhase.VISUSAMPLE)
     else:
         logging.info("Trying to set visusample phase. But already in that phase.")
 
@@ -575,4 +586,3 @@ def take_snapshots(number_of_snapshots, px1env, phi, drawing):
   centredImages.reverse() # snapshot order must be according to positive rotation direction
 
   return centredImages
-
