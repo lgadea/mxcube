@@ -72,6 +72,7 @@ class PixelDetector:
         self.jpeg_allframes = False
         self.shutterless_exptime = None
         self.shutterless_range = None
+	self.last_time_visu = time.time()
 
     @task
     def prepare_acquisition(self, take_dark, start, osc_range, exptime, npass, number_of_images, comment=""):
@@ -251,15 +252,24 @@ class PixelDetector:
             subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_thumb_path, '0.1' ])
 
             self.first_frame = False
-
-        self.adxv_sync(self.current_filename)
+        
+	interval_time = 2.
+	now = time.time()
+        try:
+            # every 2 seconds send a message to adxv for visu.
+            if (now - self.last_time_visu >= interval_time):
+                self.last_time_visu = now
+                self.adxv_sync(self.current_filename)
+        except Exception, err:
+            logging.warning("Warning for display with ADXV: %s" % err)
+                        
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
-        adxv_send_fmt = "\nload_image %s" + "\n"+ chr(32)
+        adxv_send_fmt = "\nload_image %s\n"+ chr(32)
         logging.info(" ADXV_send_fmt")
         logging.info(adxv_send_fmt % imgname)
-        
+        #time.sleep(0.6)
         try:
             if not self.adxv_socket:
                 try:
@@ -269,7 +279,8 @@ class PixelDetector:
                     logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
                     logging.error("ADXV0: msg= %s" % err)
             else:
-                print "adxv_send_fmt % self.current_filename"
+                logging.info("ADXV: Warning: Can't connect to adxv socket to follow collect.")
+                logging.info(("ADXV:"+adxv_send_fmt) % imgname)
                 self.adxv_socket.send(adxv_send_fmt % imgname)
         except:
             try:
