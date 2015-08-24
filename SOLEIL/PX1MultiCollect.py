@@ -248,8 +248,13 @@ class PixelDetector:
             logging.info("   - jpegpath :  " + self.current_jpeg_path )
             logging.info("   - thumpath :  " + self.current_thumb_path )
       
-            subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_jpeg_path, '0.4' ])
-            subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_thumb_path, '0.1' ])
+            self.wait_image_on_disk(self.current_filename)
+
+            if os.path.exists( self.current_filename ):
+                subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_jpeg_path, '0.4' ])
+                subprocess.Popen([ self.imgtojpeg, self.current_filename, self.current_thumb_path, '0.1' ])
+            else:
+                logging.info("Oopps.  Trying to generate thumbs but  image is not on disk") 
 
             self.first_frame = False
         
@@ -263,6 +268,17 @@ class PixelDetector:
         except Exception, err:
             logging.warning("Warning for display with ADXV: %s" % err)
                         
+
+    def wait_image_on_disk(self, filename,timeout=10.0):
+        start_wait = time.time()
+        while not os.path.exists(filename):
+            dirname = os.path.dirname(filename)
+            logging.info("Waiting for image %s to appear on disk. Not there yet." % filename)
+            if time.time() - start_wait > timeout:
+               break
+               logging.info("Giving up waiting for image. Timeout")
+            time.sleep(0.1)
+        logging.info("Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
@@ -710,7 +726,14 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def get_machine_message(self):
         logging.info("<PX1 MultiCollect> getting machine message" )
         if  self.bl_control.machine_current is not None:
-            return self.bl_control.machine_current.getMessage()
+            msg = self.bl_control.machine_current.getMessage()
+            try: 
+               amsg = msg.encode('ascii', 'replace')
+            except:
+               import traceback
+               logging.info("<PX1 MultiCollect> error encoding message %s" % traceback.format_exc())
+               amsg = "err getting message"
+            return amsg
         else:
             return 'Not implemented yet'
 

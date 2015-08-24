@@ -563,10 +563,10 @@ def take_snapshots(number_of_snapshots, px1env, phi, drawing):
     
     logging.info("MiniDiffPX1: readyForManualTransfer = %s" % _ready)
     if not _ready:
-        with gevent.Timeout(15):
+        with gevent.Timeout(25):
+            px1env.setPhase(EnvironmentPhase.VISUSAMPLE)
             while not px1env.readState() == "ON":
                 time.sleep(0.05)
-            px1env.setPhase(EnvironmentPhase.VISUSAMPLE)
     else:
         logging.info("Trying to set visusample phase. But already in that phase.")
 

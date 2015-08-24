@@ -6,6 +6,7 @@ the QueueModel.
 import copy
 import os
 import queue_model_enumerables_v1 as queue_model_enumerables
+import logging
 
 class TaskNode(object):
     """
@@ -758,8 +759,10 @@ class PathTemplate(object):
         :returns: Archive directory.
         :rtype: str
         """
+        logging.debug("getting archive directory from %s" % self.directory)
         folders = self.directory.split('/')
         endstation_name = None
+
         try:
             folders[2] = PathTemplate.archive_folder
         except:
@@ -772,12 +775,15 @@ class PathTemplate(object):
             folders[3] = folders[4]
             folders[4] = temp
         else:
-            endstation_name = folders[2]
-            folders[2] = PathTemplate.archive_folder
-            folders[3] = endstation_name
+            #endstation_name = folders[2]
+            #folders[2] = PathTemplate.archive_folder
+            #folders[3] = endstation_name
+            pass
 
-        archive_directory = os.path.join(os.path.join(PathTemplate.archive_base_directory, *folders[2:]))
+        # archive_directory = os.path.join(os.path.join(PathTemplate.archive_base_directory, *folders[2:]))
+        archive_directory = self.directory.replace("RAW_DATA", PathTemplate.archive_folder)
 
+        logging.debug("PathTemplate archive directory is %s" % archive_directory)
         return archive_directory
 
     def get_files_to_be_written(self):
