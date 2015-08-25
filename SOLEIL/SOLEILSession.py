@@ -3,6 +3,7 @@ import os, time, logging
 from HardwareRepository import HardwareRepository
 
 import Session
+import queue_model_objects_v1 as queue_model_objects
 
 class SOLEILSession(Session.Session):
 
@@ -12,6 +13,10 @@ class SOLEILSession(Session.Session):
         self.gid = ''
         self.uid = ''
         self.projuser = ''
+
+    def init(self):
+        Session.Session.init(self)
+        queue_model_objects.PathTemplate.set_archive_translation( self.get_archive_directory )
 
     def path_to_ispyb(self, path):
         ispyb_base = self["file_info"].getProperty('ispyb_base_directory') % {'projuser': self.projuser}
@@ -84,7 +89,7 @@ class SOLEILSession(Session.Session):
     #        thedir = os.path.join(thedir, 'ARCHIVE')
     #    return thedir
 
-    def get_archive_directory(self, directory=None):
+    def get_archive_directory(self, directory=None, *args):
         if directory is None:
             thedir = self.get_base_data_directory()
         else:

@@ -24,6 +24,7 @@ class BLEnergy (Device) :
         self.deviceOk = True
         self.prev_state = None
         self.doBacklashCompensation = False
+        self.current_energy = None
         
         # Connect to device BLEnergy defined "tangoname" in the xml file 
         try :
@@ -71,9 +72,15 @@ class BLEnergy (Device) :
         
     # function called during polling
     def energyChanged(self,value):
-        #logging.getLogger("HWR").debug("%s: BLEnergy.energyChanged: %.3f", self.name(), value)
+
+        if self.current_energy is not None and abs(self.current_energy - value) < 0.0001:
+            return
+
+        self.current_energy = value     
+        logging.getLogger("HWR").debug("%s: BLEnergy.energyChanged: %.5f", self.name(), value)
         wav = self.monodevice.read_attribute("lambda").value
         if wav is not None:
+            logging.getLogger("HWR").debug("BLEnergy.energyChanged: Emitting (egy, wav) = %.5f, %.5f", value, wav)
             self.emit('energyChanged', (value,wav))
             
             

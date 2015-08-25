@@ -704,6 +704,11 @@ class PathTemplate(object):
     def set_archive_path(archive_base_directory, archive_folder):
         PathTemplate.archive_base_directory = archive_base_directory
         PathTemplate.archive_folder = archive_folder
+        PathTemplate.translate_func = None
+
+    @staticmethod
+    def set_archive_translation(translate_func):
+        PathTemplate.translate_func = translate_func
 
     def __init__(self):
         object.__init__(self)
@@ -760,6 +765,11 @@ class PathTemplate(object):
         :rtype: str
         """
         logging.debug("getting archive directory from %s" % self.directory)
+
+        if PathTemplate.translate_func is not None:
+             return PathTemplate.translate_func(self.directory)
+
+        # keep standard translation method if not set
         folders = self.directory.split('/')
         endstation_name = None
 
@@ -775,13 +785,9 @@ class PathTemplate(object):
             folders[3] = folders[4]
             folders[4] = temp
         else:
-            #endstation_name = folders[2]
-            #folders[2] = PathTemplate.archive_folder
-            #folders[3] = endstation_name
-            pass
-
-        # archive_directory = os.path.join(os.path.join(PathTemplate.archive_base_directory, *folders[2:]))
-        archive_directory = self.directory.replace("RAW_DATA", PathTemplate.archive_folder)
+            endstation_name = folders[2]
+            folders[2] = PathTemplate.archive_folder
+            folders[3] = endstation_name
 
         logging.debug("PathTemplate archive directory is %s" % archive_directory)
         return archive_directory

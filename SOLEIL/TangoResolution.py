@@ -2,7 +2,6 @@
 import math
 import logging
 import time
-import qt
 
 from PyTango import DeviceProxy
 
@@ -65,7 +64,8 @@ class TangoResolution(BaseHardwareObjects.Equipment):
                 logging.getLogger("HWR").error('TangoResolution: invalid %s hardware object' % self.blenergyHOname)
                 self.configOk=False
             self.blenergyHO=hobj
-            self.connect(self.blenergyHO,qt.PYSIGNAL('energyChanged'), self.energyChanged)
+            self.connect(self.blenergyHO, 'energyChanged', self.energyChanged)
+
         # creer un chanel sur l'energy: pour faire un update 
         positChan = self.getChannelObject("position") # utile seulement si statechan n'est pas defini dans le code
         positChan.connectSignal("update", self.positionChanged)
@@ -124,7 +124,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
             self.recalculateResolution()
         return self.currentResolution
 
-    def energyChanged(self, energy):
+    def energyChanged(self, energy, wavelength=None):
         if self.currentEnergy is None:
             self.currentEnergy = energy
         if type(energy) is not float:
@@ -135,6 +135,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
             self.wavelengthChanged(self.blenergyHO.getCurrentWavelength())
         
     def wavelengthChanged(self, wavelength):
+        logging.getLogger("HWR").debug("TangoResolution. wavelength changed %s" % wavelength)
         self.currentWavelength = wavelength
         self.recalculateResolution()
         
@@ -143,6 +144,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
         self.currentResolution = self.dist2res(self.currentDistance)
         if self.currentResolution is None:
             return
+        logging.getLogger("HWR").debug("TangoResolution. recalculate resolution. new resolution is %s " % self.currentResolution)
         self.newResolution(self.currentResolution) 
 
     def newResolution(self, res):      
