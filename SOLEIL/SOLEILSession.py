@@ -109,7 +109,11 @@ class SOLEILSession(Session.Session):
         else:
            usertype = 'users'
 
-        basedir = os.path.dirname( path )
+        if not os.path.isdir(path):
+           basedir = os.path.dirname( path )
+        else:
+           basedir = path
+
         ruchepath = basedir.replace( self["file_info"].getProperty('base_directory'), '' )
         if ruchepath and ruchepath[0] == os.path.sep:
             ruchepath = ruchepath[1:]

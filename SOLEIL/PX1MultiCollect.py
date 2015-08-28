@@ -388,7 +388,9 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         self.jpegoption = self.getProperty("jpegoption")
         if self.jpegoption == 'allframes':
             self._detector.jpeg_allframes = True
-        self.ruche_sync_dir = self.getProperty("ruche_sync_dir")
+
+        #self.ruche_sync_dir = self.getProperty("ruche_sync_dir")
+        self.ruche_ho = self.getObjectByRole("ruche")
     
         self.setControlObjects(diffractometer = self.getObjectByRole("diffractometer"),
                                sample_changer = self.getObjectByRole("sample_changer"),
@@ -505,7 +507,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def data_collection_cleanup(self):
         self.close_fast_shutter()
-        self.trigger_data_sync()
+        # self.trigger_data_sync()
+        self.ruche_ho.trigger_sync( self.current_jpeg_full_path ) 
 
     @task
     def close_fast_shutter(self):

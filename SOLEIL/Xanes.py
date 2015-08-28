@@ -89,7 +89,7 @@ class Xanes(BaseHardwareObjects.Device):
         self.expert = expert
 
         #test specifics
-        if self.mode == 'test':
+        if self.getProperty("mode") == 'test':
             self.integrationTime = 0.01
 
     def init(self):

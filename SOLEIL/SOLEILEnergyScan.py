@@ -1,7 +1,7 @@
-from qt import *
 from HardwareRepository.BaseHardwareObjects import Equipment
 from HardwareRepository.TaskUtils import *
 import logging
+
 import PyChooch
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -10,7 +10,6 @@ import time
 import types
 import math
 import gevent
-import Xanes
 
 class SOLEILEnergyScan(Equipment):
 
@@ -25,7 +24,6 @@ class SOLEILEnergyScan(Equipment):
         self.defaultWavelength=None
         self._element = None
         self._edge = None
-        self.doEnergyScan = None
 
         try:
             self.defaultWavelengthChannel=self.getChannelObject('default_wavelength')
@@ -51,19 +49,14 @@ class SOLEILEnergyScan(Equipment):
             else:
                 self.connect(self.scanStatusMessage,'update',self.scanStatusChanged)
 
-            try:
-                self.doEnergyScan.connectSignal('commandReplyArrived', self.scanCommandFinished)
-                self.doEnergyScan.connectSignal('commandBeginWaitReply', self.scanCommandStarted)
-                self.doEnergyScan.connectSignal('commandFailed', self.scanCommandFailed)
-                self.doEnergyScan.connectSignal('commandAborted', self.scanCommandAborted)
-                self.doEnergyScan.connectSignal('commandReady', self.scanCommandReady)
-                self.doEnergyScan.connectSignal('commandNotReady', self.scanCommandNotReady)
-            except AttributeError,diag:
-                logging.getLogger("HWR").warning('EnergyScan: error initializing energy scan (%s)' % str(diag))
-                # self.doEnergyScan = Xanes #.xanes(None, None) #None
-            else:
-                self.doEnergyScan.connectSignal("connected", self.sConnected)
-                self.doEnergyScan.connectSignal("disconnected", self.sDisconnected)
+            self.session_ho=self.getObjectByRole("session")
+            if self.session_ho is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the session hardware object')
+
+            self.ruche_ho=self.getObjectByRole("ruche")
+            if self.ruche_ho is None:
+                logging.getLogger("HWR").warning('EnergyScan: you should specify the ruche hardware object')
+
 
             self.xanes_ho=self.getObjectByRole("xanes")
             if self.xanes_ho is None:
@@ -118,38 +111,14 @@ class SOLEILEnergyScan(Equipment):
         if self.thEdgeThreshold is None:
            self.thEdgeThreshold = 0.01
         
-        if self.isConnected():
-           self.sConnected()
-
-    def isConnected(self):
-        if self.defaultWavelengthChannel is not None:
-          # single wavelength beamline
-          try:
-            return self.defaultWavelengthChannel.isConnected()
-          except:
-            return False
-        else:
-          try:
-            return self.doEnergyScan.isConnected()
-          except:
-            return False
-
     def resolutionPositionChanged(self,res):
         self.lastResolution=res
 
     def energyStateChanged(self, state):
         if state == self.energyMotor.READY:
-          if self.resolutionMotor is not None:
-            self.resolutionMotor.dist2res()
+            if self.resolutionMotor is not None:
+               self.resolutionMotor.dist2res()
     
-    # Handler for spec connection
-    def sConnected(self):
-        self.emit('connected', ())
-
-    # Handler for spec disconnection
-    def sDisconnected(self):
-        self.emit('disconnected', ())
-
     def setElement(self):
         logging.getLogger("HWR").debug('EnergyScan: setElement')
         self.emit('setElement', (self._element, self._edge))
@@ -211,13 +180,13 @@ class SOLEILEnergyScan(Equipment):
             self.emit('scanStatusChanged', ("Error setting energy scan parameters",))
             return False
         try:
-            #self.doEnergyScan("%s %s" % (element,edge))
             self.scanCommandStarted()
             self.xanes_ho.scan() #start() #scan()
             self.scanCommandFinished('success')
         except:
             import traceback
             logging.getLogger("HWR").error('EnergyScan: problem calling sequence %s' % traceback.format_exc())
+            self.scanCommandFailed()
             self.emit('scanStatusChanged', ("Error problem spec macro",))
             return False
         return True
@@ -416,21 +385,22 @@ class SOLEILEnergyScan(Equipment):
         canvas=FigureCanvasAgg(fig)
 
         escan_png = os.path.extsep.join((scanFilePrefix, "png"))
-        escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png")) 
-        self.scanInfo["jpegChoochFileFullPath"]=str(escan_archivepng)
+        self.escan_archivepng = os.path.extsep.join((scanArchiveFilePrefix, "png")) 
+        escan_ispyb_path = self.session_ho.path_to_ispyb( self.escan_archivepng )
+        self.scanInfo["jpegChoochFileFullPath"]=str(escan_ispyb_path)
         try:
           logging.getLogger("HWR").info("Rendering energy scan and Chooch graphs to PNG file : %s", escan_png)
           canvas.print_figure(escan_png, dpi=80)
         except:
           logging.getLogger("HWR").exception("could not print figure")
         try:
-          logging.getLogger("HWR").info("Saving energy scan to archive directory for ISPyB : %s", escan_archivepng)
-          canvas.print_figure(escan_archivepng, dpi=80)
+          logging.getLogger("HWR").info("Saving energy scan to archive directory for ISPyB : %s", self.escan_archivepng)
+          canvas.print_figure(self.escan_archivepng, dpi=80)
         except:
           logging.getLogger("HWR").exception("could not save figure")
 
         self.storeEnergyScan()
-        self.scanInfo=None
+        #self.scanInfo=None
 
         logging.getLogger("HWR").info("<chooch> returning %s" % [pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, rm, chooch_graph_x, chooch_graph_y1, chooch_graph_y2, title])
 
@@ -442,11 +412,39 @@ class SOLEILEnergyScan(Equipment):
         self.emit('scanStatusChanged', (status,))
     
     def storeEnergyScan(self):
-        #self.xanes.saveDat()
         self.xanes_ho.saveRaw()
         self.xanes_ho.saveResults()
         
+        if self.dbConnection is None:
+            return
+        try:
+            session_id=int(self.scanInfo['sessionId'])
+        except:
+            return
+
+        self.storeScanInLIMS(wait=False)
+
         logging.info('SOLEILEnergyScan storeEnergyScan OK')
+
+    @task
+    def storeScanInLIMS(self):
+        scanInfo = dict(self.scanInfo)
+
+        blsampleid = scanInfo['blSampleId']
+        scanInfo.pop('blSampleId')
+
+        db_status=self.dbConnection.storeEnergyScan(scanInfo)
+
+        if blsampleid is not None:
+            try:
+                energyscanid=int(db_status['energyScanId'])
+            except:
+                pass
+            else:
+                asoc={'blSampleId':blsampleid, 'energyScanId':energyscanid}
+                self.dbConnection.associateBLSampleAndEnergyScan(asoc)
+
+        self.ruche_ho.trigger_sync( self.escan_archivepng )
 
     def updateEnergyScan(self,scan_id,jpeg_scan_filename):
         pass
