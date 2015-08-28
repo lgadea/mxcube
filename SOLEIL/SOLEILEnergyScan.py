@@ -108,6 +108,7 @@ class SOLEILEnergyScan(Equipment):
                 self.energyMotor.connect('positionChanged', self.energyPositionChanged)
                 self.energyMotor.connect('stateChanged', self.energyStateChanged)
                 self.energyMotor.connect('limitsChanged', self.energyLimitsChanged)
+                self.energyMotor.connect('energyChanged', self.energyChanged)
             if self.resolutionMotor is None:
                 logging.getLogger("HWR").warning('EnergyScan: no resolution motor (unable to restore it after moving the energy)')
             else:
@@ -572,6 +573,10 @@ class SOLEILEnergyScan(Equipment):
             other_val=None
         return other_val
    
+    def energyChanged(self, pos, wav):
+        self.emit('energyChanged', (pos,wav))
+        self.emit('valueChanged', (pos, ))
+
     def energyPositionChanged(self,pos):
         wav=self.energy2wavelength(pos)
         if wav is not None:
