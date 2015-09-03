@@ -55,7 +55,7 @@ class Ketek(BaseHardwareObjects.Device):
 
         try:
             commandlogic = self.getProperty("commandlogic")
-            logging.error("Ketek. commandlogic is %s" % commandlogic)
+            #logging.error("Ketek. commandlogic is %s" % commandlogic)
             if commandlogic == 'inverted':
                 self.commandlogic = 'inverted'
             else:
