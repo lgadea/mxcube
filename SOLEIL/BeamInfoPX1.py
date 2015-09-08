@@ -55,19 +55,19 @@ class BeamInfoPX1(Equipment):
         self.positionTable = {}
        
     def init(self):
+	logging.getLogger().info(' go to Initializing beamsize ')
+        try:
+            self.chanBeamSizeX = self.getChannelObject('beamsizex')
+            self.chanBeamSizeX.connectSignal('update', self.beamSizeXChanged)
+        except KeyError:
+            logging.getLogger().warning('%s: cannot connect to beamsize x channel ', self.name())
 
-        # try:
-            # self.chanBeamSizeX = self.getChannelObject('beamsizex')
-            # self.chanBeamSizeX.connectSignal('update', self.beamSizeXChanged)
-        # except KeyError:
-            # logging.getLogger().warning('%s: cannot connect to beamsize x channel ', self.name())
-# 
-        # try:
-            # self.chanBeamSizeY = self.getChannelObject('beamsizey')
-            # self.chanBeamSizeY.connectSignal('update', self.beamSizeYChanged)
-        # except KeyError:
-            # logging.getLogger().warning('%s: cannot connect to beamsize y channel ', self.name())
-# 
+        try:
+            self.chanBeamSizeY = self.getChannelObject('beamsizey')
+            self.chanBeamSizeY.connectSignal('update', self.beamSizeYChanged)
+        except KeyError:
+            logging.getLogger().warning('%s: cannot connect to beamsize y channel ', self.name())
+
         # try:
             # self.chanBeamPosX = self.getChannelObject('positionx')
             # self.chanBeamPosX.connectSignal('update', self.beamPosXChanged)
@@ -98,15 +98,15 @@ class BeamInfoPX1(Equipment):
 
     def beamSizeXChanged(self, value):
         logging.getLogger().info('beamSizeX changed. It is %s ' % value)
-        #if value is not None:
-        #    self.beam_size[0] = value
-        #    self.sizeUpdated() 
+        if value is not None:
+            self.beam_size[0] = value
+            self.sizeUpdated() 
 
     def beamSizeYChanged(self, value):
         logging.getLogger().info('beamSizeY changed. It is %s ' % value)
-        #if value is not None:
-        #    self.beam_size[1] = value
-        #    self.sizeUpdated() 
+        if value is not None:
+            self.beam_size[1] = value
+            self.sizeUpdated() 
 
     def beamPosXChanged(self, value):
         #self.beam_position[0] = value
@@ -129,12 +129,7 @@ class BeamInfoPX1(Equipment):
            logging.getLogger().info('not handled')
             
     def sizeUpdated(self):
-        self.beam_info_dict['size_x'] = 0.045
-        self.beam_info_dict['size_y'] = 0.030
-        self.emit("beamInfoChanged", (self.beam_info_dict, ))
-
-    def sizeUpdated2(self):
-        # not used
+        
         if None in self.beam_size:
              return
         self.beam_info_dict['size_x'] = self.beam_size[0]
