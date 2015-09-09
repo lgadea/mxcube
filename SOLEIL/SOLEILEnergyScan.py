@@ -19,6 +19,7 @@ class SOLEILEnergyScan(Equipment):
         self.moving = None
         self.energyMotor = None
         self.energyScanArgs = None
+        self.scanStatusMessage = None
         self.archive_prefix = None
         self.energy2WavelengthConstant=None
         self.defaultWavelength=None
@@ -35,19 +36,19 @@ class SOLEILEnergyScan(Equipment):
 
         if self.defaultWavelengthChannel is None:
             #MAD beamline
-            try:
-                self.energyScanArgs=self.getChannelObject('escan_args')
-            except KeyError:
-                logging.getLogger("HWR").warning('EnergyScan: error initializing energy scan arguments (missing channel)')
-                self.energyScanArgs=None
+            #try:
+            #    self.energyScanArgs=self.getChannelObject('escan_args')
+            #except KeyError:
+            #    logging.getLogger("HWR").warning('EnergyScan: error initializing energy scan arguments (missing channel)')
+            #    self.energyScanArgs=None
 
-            try:
-                self.scanStatusMessage=self.getChannelObject('scanStatusMsg')
-            except KeyError:
-                self.scanStatusMessage=None
-                logging.getLogger("HWR").warning('EnergyScan: energy messages will not appear (missing channel)')
-            else:
-                self.connect(self.scanStatusMessage,'update',self.scanStatusChanged)
+            #try:
+            #    self.scanStatusMessage=self.getChannelObject('scanStatusMsg')
+            #except KeyError:
+            #    self.scanStatusMessage=None
+            #    logging.getLogger("HWR").warning('EnergyScan: energy messages will not appear (missing channel)')
+            #else:
+            #    self.connect(self.scanStatusMessage,'update',self.scanStatusChanged)
 
             self.session_ho=self.getObjectByRole("session")
             if self.session_ho is None:
@@ -78,17 +79,13 @@ class SOLEILEnergyScan(Equipment):
             if self.transmissionHO is None:
                 logging.getLogger("HWR").warning('EnergyScan: you should specify the transmission hardware object')
 
-            self.cryostreamHO=self.getObjectByRole("cryostream")
-            if self.cryostreamHO is None:
-                logging.getLogger("HWR").warning('EnergyScan: you should specify the cryo stream hardware object')
-
             self.machcurrentHO=self.getObjectByRole("machcurrent")
             if self.machcurrentHO is None:
                 logging.getLogger("HWR").warning('EnergyScan: you should specify the machine current hardware object')
 
-            self.fluodetectorHO=self.getObjectByRole("fluodetector")
-            if self.fluodetectorHO is None:
-                logging.getLogger("HWR").warning('EnergyScan: you should specify the fluorescence detector hardware object')
+            #self.fluodetectorHO=self.getObjectByRole("fluodetector")
+            #if self.fluodetectorHO is None:
+            #    logging.getLogger("HWR").warning('EnergyScan: you should specify the fluorescence detector hardware object')
 
             try:
                 self.moveEnergy.connectSignal('commandReady', self.moveEnergyCmdReady)
@@ -110,7 +107,11 @@ class SOLEILEnergyScan(Equipment):
         self.thEdgeThreshold = self.getProperty("theoritical_edge_threshold")
         if self.thEdgeThreshold is None:
            self.thEdgeThreshold = 0.01
-        
+    
+    def isConnected(self):
+	#need in EnergyScanBrick in property changed see in futur
+        return True
+    
     def resolutionPositionChanged(self,res):
         self.lastResolution=res
 
@@ -149,8 +150,8 @@ class SOLEILEnergyScan(Equipment):
         self.xanes_ho.setup(self, element, edge, directory, prefix, session_id, blsample_id, plot=False)
         
         self.scanInfo={"sessionId":session_id,"blSampleId":blsample_id,"element":element,"edgeEnergy":edge}
-        if self.fluodetectorHO is not None:
-            self.scanInfo['fluorescenceDetector']=self.fluodetectorHO.userName()
+        #if self.fluodetectorHO is not None:
+        self.scanInfo['fluorescenceDetector'] = "Ketek detector" #self.fluodetectorHO.userName()
         if not os.path.isdir(directory):
             logging.getLogger("HWR").debug("EnergyScan: creating directory %s" % directory)
             try:
