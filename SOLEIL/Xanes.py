@@ -130,7 +130,7 @@ class Xanes(BaseHardwareObjects.Device):
 
         if self.normdiode not in self.diodes:
             logging.error("Xanes.py - normalization_diode must be in .xml and should be one of the defined diodes") 
-        logging.error("Xanes.py - self.diodes: %s" % self.diodes) 
+        #logging.error("Xanes.py - self.diodes: %s" % self.diodes) 
  
         #self.counter = dp(self.counter_dev)
         self.pss = dp(self.pss_dev)
