@@ -14,6 +14,7 @@ import commands
 import pickle
 import math
 import os
+import logging
 import PyTango
 
 class Xanes(BaseHardwareObjects.Device):
@@ -315,9 +316,13 @@ class Xanes(BaseHardwareObjects.Device):
         self.wait(self.Attenuator)
 
     def getEdgefromXabs(self, element, edge):
+        logging.getLogger("HWR").info('XANES: element= %s  edge= %s' % (element, edge))
         edge = edge.upper()
-        roi_center = McMaster[element]['edgeEnergies'][edge + '-alpha']
-        if edge == 'L':
+        if edge[0] == 'K':
+            roi_center = McMaster[element]['edgeEnergies']['K-alpha']
+        elif edge[0] == 'L':
+            roi_center = McMaster[element]['edgeEnergies']['L-alpha']       
+        if edge[0] == 'L':
             edge = 'L3'
         e_edge = McMaster[element]['edgeEnergies'][edge]
 
