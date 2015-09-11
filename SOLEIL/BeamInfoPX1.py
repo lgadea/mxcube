@@ -33,13 +33,15 @@ import logging
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Equipment
 
+EPSILON = 0.001 # in mm
+
 class BeamInfoPX1(Equipment):
 
     def __init__(self, *args):
         Equipment.__init__(self, *args)
 
-	self.beam_position = [None, None]
-	self.beam_size     = [None, None]
+        self.beam_position = [None, None]
+        self.beam_size     = [0.3, 0.2]
         self.shape         = 'rectangular'
 
         self.beam_info_dict  = {'size_x': None, 'size_y': None, 'shape': self.shape}
@@ -94,19 +96,23 @@ class BeamInfoPX1(Equipment):
            self.zoomPositionChanged( posname, pos)
         else:
            logging.getLogger().info("Zoom - motor is not good ")
-
+        self.sizeUpdated()
 
     def beamSizeXChanged(self, value):
-        logging.getLogger().info('beamSizeX changed. It is %s ' % value)
-        if value is not None:
-            self.beam_size[0] = value
-            self.sizeUpdated() 
+        if value is not None and self.beam_size[0]:
+            _delta = abs(float(value) - float(self.beam_size[0]))
+            if _delta > EPSILON:
+                self.beam_size[0] = value
+                self.sizeUpdated()
+                logging.getLogger().info('beamSizeX changed to %.3f mm' % float(value))
 
     def beamSizeYChanged(self, value):
-        logging.getLogger().info('beamSizeY changed. It is %s ' % value)
-        if value is not None:
-            self.beam_size[1] = value
-            self.sizeUpdated() 
+        if value is not None and self.beam_size[1]:
+            _delta = abs(float(value) - float(self.beam_size[1]))
+            if _delta > EPSILON:
+                self.beam_size[1] = value
+                self.sizeUpdated()
+                logging.getLogger().info('beamSizeY changed to %.3f mm' % float(value))
 
     def beamPosXChanged(self, value):
         #self.beam_position[0] = value
@@ -129,9 +135,6 @@ class BeamInfoPX1(Equipment):
            logging.getLogger().info('not handled')
             
     def sizeUpdated(self):
-        
-        if None in self.beam_size:
-             return
         self.beam_info_dict['size_x'] = self.beam_size[0]
         self.beam_info_dict['size_y'] = self.beam_size[1]
         self.emit("beamInfoChanged", (self.beam_info_dict, ))
