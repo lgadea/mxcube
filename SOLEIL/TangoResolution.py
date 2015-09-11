@@ -100,6 +100,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
     
     def positionChanged(self, value):
         res = self.dist2res(value)
+        self.currentResolution = res
         try:
             logging.getLogger("HWR").debug("%s: TangoResolution.positionChanged: %.3f", self.name(), res)
         except:
@@ -144,13 +145,11 @@ class TangoResolution(BaseHardwareObjects.Equipment):
         self.currentResolution = self.dist2res(self.currentDistance)
         if self.currentResolution is None:
             return
-        logging.getLogger("HWR").debug("TangoResolution. recalculate resolution. new resolution is %s " % self.currentResolution)
         self.newResolution(self.currentResolution) 
 
     def newResolution(self, res):      
         if self.currentResolution is None:
             self.currentResolution = self.recalculateResolution()
-        logging.getLogger().info("new resolution = %.3f" % res)
         self.currentResolution = res
         self.emit("positionChanged", (res, ))
     
@@ -264,7 +263,7 @@ class TangoResolution(BaseHardwareObjects.Equipment):
             if self.currentWavelength is None:
                 self.currentWavelength = self.blenergyHO.getCurrentWavelength()
             thetaangle2 = math.atan(DETECTOR_DIAMETER/2./Distance)
-            Resolution = 0.5*self.currentWavelength /math.sin(thetaangle2/2.)
+            Resolution = round(0.5*self.currentWavelength /math.sin(thetaangle2/2.),3)
             if callable(callback):
                 callback(Resolution)
             return Resolution
