@@ -212,9 +212,9 @@ class PX1Environment(Device):
         else:
             return None
          
-    def setPhase(self, phase):
+    def setPhase(self, phase, timeout=120):
         self.gotoPhase(phase) 
-        self.waitPhase(phase, 120)
+        self.waitPhase(phase, timeout)
 
     def readPhase(self):
         if self.device is not None:
