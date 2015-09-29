@@ -118,7 +118,7 @@ class ISPyBClient2(HardwareObject):
         try:
             formatter = \
                 logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-            hdlr = logging.FileHandler('/users/blissadm/log/ispyb_client.log')
+            hdlr = logging.FileHandler('/home/local/mxcube_v2/log/ispyb_client.log')
             hdlr.setFormatter(formatter)
             logger.addHandler(hdlr) 
         except:
@@ -249,6 +249,8 @@ class ISPyBClient2(HardwareObject):
                     if not person:
                         person = {}
 
+                    logging.debug("ISPyB. findPersonByProposal %s" % person)
+
                 except WebFault, e:
                     logging.getLogger("ispyb_client").exception(e.message)
                     person = {}
@@ -266,6 +268,7 @@ class ISPyBClient2(HardwareObject):
                                 'Laboratory': {}, 
                                 'Session': {}, 
                                 'status': {'code':'error'}}
+                    logging.debug("ISPyB. findProposal %s" % proposal)
 
                 except WebFault, e:
                     logging.getLogger("ispyb_client").exception(e.message)
@@ -369,6 +372,7 @@ class ISPyBClient2(HardwareObject):
 
     @trace
     def store_data_collection(self, *args, **kwargs):
+        logging.info("<ISPyBClient2> store_data_collection")        
         try:
           return self._store_data_collection(*args, **kwargs)
         except gevent.GreenletExit:
@@ -396,7 +400,7 @@ class ISPyBClient2(HardwareObject):
         """
         if self.__disabled:
             return (0,0)
-        
+        logging.info("<ISPyBClient2> _store_data_collection")                
         wsclient = self._wsdl_collection_client()
 
         mx_collection = copy.copy(mx_collection)
@@ -1210,7 +1214,7 @@ class ISPyBClient2(HardwareObject):
                      storeOrUpdateMotorPosition(mpos_dict)
             msg = 'Centred position stored in lims: %s' % pos_id
             logging.getLogger("ispyb_client").debug(msg)
-        except ex:
+        except Exception, ex:
             msg = 'Could not store centred position in lims: %s' % ex.message
             logging.getLogger("ispyb_client").exception(msg)
 
