@@ -15,6 +15,7 @@ class BLEnergy (Device) :
                    'RUNNING': 'moving',
                    'MOVING' : 'moving',
                    'STANDBY' : 'ready',
+                   'DISABLE' : 'error',
                    'UNKNOWN': 'unknown',
                    'EXTRACT': 'outlimits'}
 
@@ -149,8 +150,6 @@ class BLEnergy (Device) :
             
     def getCurrentWavelength(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentWavelength", self.name())
-        logging.getLogger("HWR").debug("   BLEnergy deviceOk %s", self.deviceOk)
-        logging.getLogger("HWR").debug("   BLEnergy mono.wavel  %.5f", self.monodevice.read_attribute("lambda").value)
         # Pb with the attribute name "lamdda" which is a keyword for python
         if self.deviceOk :           
             # using calculation of the device mono
@@ -203,7 +202,7 @@ class BLEnergy (Device) :
         gaplimite = 5.5  # en mm
 
         if (  str( self.BLEnergydevice.State() ) != "MOVING" and self.deviceOk) :
-            if self.doBacklashCompensation :
+            if self.doBacklashCompensation:
                 try : 
                     # Recuperation de la valeur de gap correspondant a l'energie souhaitee
                     self.U20Energydevice.autoApplyComputedParameters = False
@@ -293,7 +292,6 @@ class BLEnergy (Device) :
     def moveEnergyCmdFinished(self):
         logging.getLogger("HWR").debug("%s: BLEnergy.moveEnergyCmdFinished", self.name())
         self.moving = False
-        print 'moveEnergyFinished'
         #self.emit('moveEnergyFinished',(BLEnergy.stateEnergy[str(self.BLEnergydevice.State())]))
         self.emit('moveEnergyFinished',())
         
