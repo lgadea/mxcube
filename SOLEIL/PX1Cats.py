@@ -884,8 +884,9 @@ class PX1Cats(SampleChanger):
         if value is None:
              value = self._chnToolOpen.getValue()
 
-        self._toolState = value
+        #self._toolState = value
         if self._toolState != value:
+             self._toolState = value
              self.emit('toolOpenChanged', (value, ))
 
     def _updateLidState(self, value=None):
