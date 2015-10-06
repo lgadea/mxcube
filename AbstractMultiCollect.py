@@ -436,11 +436,13 @@ class AbstractMultiCollect(object):
         logging.info("<AbstractMultiCollect> - creating directories for images  %s" % str(file_parameters['directory']))
         logging.info("<AbstractMultiCollect> - creating directories for processing  %s" % str(file_parameters['process_directory']))
 
-        self.create_directories(file_parameters['directory'],  file_parameters['process_directory'])
+        self.create_directories(file_parameters['directory'], 
+                                file_parameters['process_directory'],
+                                archive_directory)
         logging.info("<AbstractMultiCollect> - xds_dir debug 1  ")
         self.xds_directory, self.mosflm_directory, self.hkl2000_directory = self.prepare_input_files(file_parameters["directory"], file_parameters["prefix"], file_parameters["run_number"], file_parameters['process_directory'])
         logging.info("<AbstractMultiCollect> - xds_dir is %s" % self.xds_directory)
-        logging.info("<AbstractMultiCollect> - dc pars is %s" % str(data_collect_parameters))
+        #logging.info("<AbstractMultiCollect> - dc pars is %s" % str(data_collect_parameters))
 
         data_collect_parameters['xds_dir'] = self.xds_directory
 
@@ -467,7 +469,10 @@ class AbstractMultiCollect(object):
             # why .get() is not working as expected?
             # got KeyError anyway!
             if data_collect_parameters["take_snapshots"]:
-              self.take_crystal_snapshots()
+              self.take_crystal_snapshots(data_collect_parameters["take_snapshots"])
+            else :
+                self.diffractometer().centringStatus["images"]=[]
+                
         except KeyError:
             pass
 
