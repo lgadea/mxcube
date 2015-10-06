@@ -41,7 +41,6 @@ class BeamInfoPX1(Equipment):
         Equipment.__init__(self, *args)
 
         self.beam_position = [None, None]
-        self.beam_size     = [0.3, 0.2]
         self.shape         = 'rectangular'
 
         self.beam_info_dict  = {'size_x': None, 'size_y': None, 'shape': self.shape}
@@ -57,7 +56,6 @@ class BeamInfoPX1(Equipment):
         self.positionTable = {}
        
     def init(self):
-	logging.getLogger().info(' go to Initializing beamsize ')
         try:
             self.chanBeamSizeX = self.getChannelObject('beamsizex')
             self.chanBeamSizeX.connectSignal('update', self.beamSizeXChanged)
@@ -96,30 +94,21 @@ class BeamInfoPX1(Equipment):
            self.zoomPositionChanged( posname, pos)
         else:
            logging.getLogger().info("Zoom - motor is not good ")
+        
+        
+    def beamSizeXChanged(self, value):
+        self.beam_info_dict['size_x'] = value
         self.sizeUpdated()
 
-    def beamSizeXChanged(self, value):
-        if value is not None and self.beam_size[0]:
-            _delta = abs(float(value) - float(self.beam_size[0]))
-            if _delta > EPSILON:
-                self.beam_size[0] = value
-                self.sizeUpdated()
-                logging.getLogger().info('beamSizeX changed to %.3f mm' % float(value))
-
     def beamSizeYChanged(self, value):
-        if value is not None and self.beam_size[1]:
-            _delta = abs(float(value) - float(self.beam_size[1]))
-            if _delta > EPSILON:
-                self.beam_size[1] = value
-                self.sizeUpdated()
-                logging.getLogger().info('beamSizeY changed to %.3f mm' % float(value))
+        self.beam_info_dict['size_y'] = value
+        self.sizeUpdated()
+        
 
     def beamPosXChanged(self, value):
-        #self.beam_position[0] = value
         self.positionUpdated() 
 
     def beamPosYChanged(self, value):
-        #self.beam_position[1] = value
         self.positionUpdated() 
 
     def zoomPositionChanged(self, name, offset):
@@ -135,19 +124,23 @@ class BeamInfoPX1(Equipment):
            logging.getLogger().info('not handled')
             
     def sizeUpdated(self):
-        self.beam_info_dict['size_x'] = self.beam_size[0]
-        self.beam_info_dict['size_y'] = self.beam_size[1]
-        self.emit("beamInfoChanged", (self.beam_info_dict, ))
+        if self.beam_info_dict['size_x'] != None and  self.beam_info_dict['size_y'] != None :
+        
+            self.emit("beamInfoChanged", (self.beam_info_dict, ))
 
     def positionUpdated(self):
 	self.emit("beamPosChanged", (self.beam_position, ))
         self.sizeUpdated()
 
     def get_beam_info(self):
-        logging.getLogger().warning('returning beam info It is %s ' % str(self.beam_info_dict))
         return self.beam_info_dict
         
     def get_beam_position(self):
-        logging.getLogger().warning('returning beam positions. It is %s ' % str(self.beam_position))
-	return self.beam_position	
+	   return self.beam_position
+
+    def get_beamSizeX(self):
+        return self.beam_info_dict['size_x']
+
+    def get_beamSizeY(self):
+        return self.beam_info_dict['size_y']
 
