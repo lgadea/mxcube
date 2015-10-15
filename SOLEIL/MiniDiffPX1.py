@@ -52,7 +52,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
                                X[2] - beam_xc, Y[2] - beam_yc)
     PhiCamera=90
 
-    logging.debug("MANUAL_CENTRING: X=%s, Y=%s (Calib=%s/%s) (BeamCen=%s/%s)" % (X, Y, pixelsPerMmY, pixelsPerMmZ, beam_xc, beam_yc))
+    logging.getLogger("HWR").info("MANUAL_CENTRING: X=%s, Y=%s (Calib=%s/%s) (BeamCen=%s/%s)" % (X, Y, pixelsPerMmY, pixelsPerMmZ, beam_xc, beam_yc))
 
     a1=math.radians(PHI[0]+PhiCamera)
     a2=math.radians(PHI[1]+PhiCamera)
@@ -68,7 +68,7 @@ def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
     y_echantillon=(q01+q02+q03)/3.0
     z_echantillon=(-dx1-dx2-dx3)/3.0
     #print "Microglide X = %d :    Y = %d :    Z = %d : " %(x_echantillon,y_echantillon,z_echantillon)
-        
+    
     x_echantillon_real=1000.*x_echantillon/pixelsPerMmY + sampx.getPosition()
     y_echantillon_real=1000.*y_echantillon/pixelsPerMmY + sampy.getPosition()
     z_echantillon_real=1000.*z_echantillon/pixelsPerMmY + phiz.getPosition()
@@ -163,7 +163,7 @@ class MiniDiffPX1(MiniDiff):
        self.beam_xc = 0
        self.beam_yc = 0
        self.beamShape = "rectangular"
-
+       
        #print "phi_is_moving", self.phiMotor.motorIsMoving()
        #print "phi_position", self.phiMotor.getPosition()
 
@@ -249,11 +249,8 @@ class MiniDiffPX1(MiniDiff):
    def get_pixels_per_mm(self):
        return (self.calib_x or 0, self.calib_y or 0)
 
-   def getCalibrationData(self, offset):
-       #logging.info("XX1: getCalibration, OFFSET: %s", offset)
-
+   def getCalibrationData(self, offset):       
        if self.lightMotor is None or self.lightMotor.positionChan.device is None:
-           logging.info("XX1: getCalibration, Not yet initialized")
            return (None,None)
 
        if self.zoomMotor is not None:
@@ -274,7 +271,6 @@ class MiniDiffPX1(MiniDiff):
        return (None, None)
 
    def motor_positions_to_screen(self, centred_positions_dict):
-
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition()) 
        if _calibration[0] and _calibration[1]:
            #logging.info("ZZ1: got calibration positions")
@@ -419,8 +415,7 @@ class MiniDiffPX1(MiniDiff):
           self.emitProgressMessage("")
 
    def zoomMotorPredefinedPositionChanged(self, positionName, offset):
-       #logging.info("XX1: zoomMotorPredefinedPositionChanged, OFFSET: %s", offset)       
-       
+       logging.getLogger("HWR").info("<<<<<<MiniDiffPX1 zoomMotorPredefinedPositionChanged ")
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition())
        if _calibration[0] and _calibration[1]:
            #logging.info("ZZ1: got calibration positions")
@@ -430,6 +425,7 @@ class MiniDiffPX1(MiniDiff):
        self.emit('zoomMotorPredefinedPositionChanged', (positionName, offset, ))
 
    def start3ClickCentring(self, sample_info=None):
+       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
        if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
