@@ -3,6 +3,7 @@
 
 import time
 import logging
+import math
 from Xanes import Xanes
 from PyTango import DeviceProxy as dp
 
@@ -84,6 +85,7 @@ class PX1Xanes(Xanes):
         #self.optimizeTransmission()
         
         if not self.test:
+            logging.info("PX1Xanes:Prepare seting integrationTime: %.2f" % float(self.integrationTime) )
             self.fluodet.set_preset( float(self.integrationTime) )
                 
         self.results = {}
@@ -95,7 +97,8 @@ class PX1Xanes(Xanes):
         self.results['dynamicRange'] = self.dynamicRange
         self.results['integrationTime'] = self.integrationTime
         self.results['nbSteps'] = self.nbSteps
-        logging.debug("PX1Xanes - finishing prepare") 
+        logging.debug("PX1Xanes - finishing prepare")
+        logging.debug("PX1Xanes - self.results: %s" % self.results) 
 
     def attenuation(self, x=None):
         '''Read or set the attenuation'''

@@ -9,6 +9,9 @@ import collections
 import gevent
 import autoprocessing
 import gevent
+import unicodedata
+import string
+
 from HardwareRepository.TaskUtils import *
 
 BeamlineControl = collections.namedtuple('BeamlineControl',
@@ -388,6 +391,13 @@ class AbstractMultiCollect(object):
     def write_input_files(self, collection_id):
         pass
 
+    def normalize_path(self,pathname, isdir=False):
+        valid_pathchars="-_.()%s%s"%(string.ascii_letters,string.digits)
+        if isdir:
+             valid_pathchars+="/"
+        clean_name=unicodedata.normalize('NFKD', unicode(pathname)).encode('ASCII','ignore')
+        return ''.join(c for c in clean_name if c in valid_pathchars)
+
     @task
     def do_collect(self, owner, data_collect_parameters):
         if self.__safety_shutter_close_task is not None:
@@ -399,6 +409,12 @@ class AbstractMultiCollect(object):
         # Preparing directory path for images and processing files
         # creating image file template and jpegs files templates
         file_parameters = data_collect_parameters["fileinfo"]
+
+        logging.getLogger("HWR").info("starting collection. File_parameters are: %s"% str(file_parameters))
+        file_parameters["prefix"] = self.normalize_path(file_parameters["prefix"])
+        file_parameters["directory"] = self.normalize_path(file_parameters["directory"], isdir=True)
+        file_parameters["process_directory"] = self.normalize_path(file_parameters["process_directory"], isdir=True)
+        logging.getLogger("HWR").info("starting collection. File_parameters (filtered) are: %s"% str(file_parameters))
 
         file_parameters["suffix"] = self.bl_config.detector_fileext
         image_file_template = "%(prefix)s_%(run_number)s_%%04d.%(suffix)s" % file_parameters
@@ -443,6 +459,7 @@ class AbstractMultiCollect(object):
         self.xds_directory, self.mosflm_directory, self.hkl2000_directory = self.prepare_input_files(file_parameters["directory"], file_parameters["prefix"], file_parameters["run_number"], file_parameters['process_directory'])
         logging.info("<AbstractMultiCollect> - xds_dir is %s" % self.xds_directory)
         #logging.info("<AbstractMultiCollect> - dc pars is %s" % str(data_collect_parameters))
+        logging.info("<AbstractMultiCollect> - owner is %s" % owner)
 
         data_collect_parameters['xds_dir'] = self.xds_directory
 

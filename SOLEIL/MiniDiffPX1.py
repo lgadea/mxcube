@@ -1,6 +1,6 @@
 import gevent
 from gevent.event import AsyncResult
-import sample_centring
+import sample_centring 
 
 import numpy
 import math
@@ -12,81 +12,7 @@ import PyTango
 from HardwareRepository.TaskUtils import *
 from PX1Environment import EnvironmentPhase
 
-USER_CLICKED_EVENT = AsyncResult()
 PHI_ANGLE_INCREMENT = 120
-
-def manual_centring(phi, phiz, sampx, sampy, pixelsPerMmY, pixelsPerMmZ,
-                    beam_xc, beam_yc, kappa, omega):
-  global USER_CLICKED_EVENT
-  X, Y, PHI = [], [], []
-  centredPosRel = {}
-  phiSavedPosition = 0
-  if all([x.isReady() for x in (phi, phiz, sampx, sampy)]):
-    phiSavedPosition = phi.getPosition()
-    #phiSavedDialPosition = phi.getDialPosition()
-    #phiSavedDialPosition = 327.3
-    logging.debug("manual_centring: testing motor ready, phiSavedPosition %.1f" % phiSavedPosition)
-  else:
-    raise RuntimeError, "motors not ready"
-  
-  kappa.move(0)
-  omega.move(0)
-
-  try:  
-    while True:
-      USER_CLICKED_EVENT = AsyncResult()
-      x, y = USER_CLICKED_EVENT.get()
-      X.append(x)
-      Y.append(y)
-      PHI.append(phi.getPosition())
-      if len(X) == 3:
-        break
-      phi.moveRelative(PHI_ANGLE_INCREMENT)
-
-    # 2014-01-19-bessy-mh: variable beam position coordinates are passed as parameters
-    #beam_xc = imgWidth / 2
-    #beam_yc = imgHeight / 2
-
-    (dx1,dy1,dx2,dy2,dx3,dy3)=(X[0] - beam_xc, Y[0] - beam_yc,
-                               X[1] - beam_xc, Y[1] - beam_yc,
-                               X[2] - beam_xc, Y[2] - beam_yc)
-    PhiCamera=90
-
-    logging.getLogger("HWR").info("MANUAL_CENTRING: X=%s, Y=%s (Calib=%s/%s) (BeamCen=%s/%s)" % (X, Y, pixelsPerMmY, pixelsPerMmZ, beam_xc, beam_yc))
-
-    a1=math.radians(PHI[0]+PhiCamera)
-    a2=math.radians(PHI[1]+PhiCamera)
-    a3=math.radians(PHI[2]+PhiCamera)
-    p01=(dy1*math.sin(a2)-dy2*math.sin(a1))/math.sin(a2-a1)        
-    q01=(dy1*math.cos(a2)-dy2*math.cos(a1))/math.sin(a1-a2)
-    p02=(dy1*math.sin(a3)-dy3*math.sin(a1))/math.sin(a3-a1)        
-    q02=(dy1*math.cos(a3)-dy3*math.cos(a1))/math.sin(a1-a3)
-    p03=(dy3*math.sin(a2)-dy2*math.sin(a3))/math.sin(a2-a3)        
-    q03=(dy3*math.cos(a2)-dy2*math.cos(a3))/math.sin(a3-a2)
-
-    x_echantillon=(p01+p02+p03)/3.0
-    y_echantillon=(q01+q02+q03)/3.0
-    z_echantillon=(-dx1-dx2-dx3)/3.0
-    #print "Microglide X = %d :    Y = %d :    Z = %d : " %(x_echantillon,y_echantillon,z_echantillon)
-    
-    x_echantillon_real=1000.*x_echantillon/pixelsPerMmY + sampx.getPosition()
-    y_echantillon_real=1000.*y_echantillon/pixelsPerMmY + sampy.getPosition()
-    z_echantillon_real=1000.*z_echantillon/pixelsPerMmY + phiz.getPosition()
-
-    if (z_echantillon_real + phiz.getPosition() < phiz.getLimits()[0]*2) :
-        logging.getLogger("HWR").error("loop too long")
-        centredPos = {}
-        phi.move(phiSavedPosition)            
-    else :    
-        centredPos= { sampx: x_echantillon_real,
-                      sampy: y_echantillon_real,
-                      phiz: z_echantillon_real}
-    return centredPos
-  except Exception, e:
-    logging.getLogger("HWR").error("MiniDiffPX1: Centring error: %s" % e)
-    phi.move(phiSavedPosition)    
-    raise
-
 
 @task
 def move_to_centred_position(centred_pos):
@@ -109,10 +35,16 @@ class MiniDiffPX1(MiniDiff):
        MiniDiff.__init__(self, *args)
        self.calib_x = None
        self.calib_y = None
-   
+
    def init(self,*args):
        MiniDiff.init(self, *args)
 
+       self.centringMethods={MiniDiff.MANUAL3CLICK_MODE: self.start3ClickCentring_nonblocking, \
+            MiniDiff.C3D_MODE: self.startAutoCentring_nonblocking }
+
+       self.centringKappa = sample_centring.CentringMotor(self.kappaMotor, reference_position=0)
+       self.centringKappaPhi = sample_centring.CentringMotor(self.kappaPhiMotor, reference_position=0)
+   
        self.permit = True
        self.phase = None
 
@@ -271,35 +203,44 @@ class MiniDiffPX1(MiniDiff):
        return (None, None)
 
    def motor_positions_to_screen(self, centred_positions_dict):
+
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition()) 
+
        if _calibration[0] and _calibration[1]:
-           #logging.info("ZZ1: got calibration positions")
            self.pixelsPerMmY, self.pixelsPerMmZ = _calibration 
 
-       #phi_angle = math.radians(self.phiMotor.getPosition()-centred_positions_dict["phi"]) 
+       
+       logging.info("Converting motor positions to screen positions")
+       logging.info("--------------------------------------------------------------")
+       logging.info("  Centred Positions are: ")
+       logging.info("       %s" % str(centred_positions_dict.items()))
+
+       logging.info("--------------------------------------------------------------")
+       logging.info("  Current Positions are: ")
+       logging.info("     phi: %s" % self.phiMotor.getPosition())
+       logging.info("   sampx: %s" % self.sampleXMotor.getPosition())
+       logging.info("   sampy: %s" % self.sampleYMotor.getPosition())
+       logging.info("    phiz: %s" % self.phizMotor.getPosition())
+       logging.info("   kappa: %s" % self.kappaMotor.getPosition())
+       logging.info("kappaphi: %s" % self.kappaPhiMotor.getPosition())
+       logging.info("--------------------------------------------------------------")
+
        phi_angle = math.radians(-self.phiMotor.getPosition()) 
 
        dx = (centred_positions_dict["sampx"]-self.sampleXMotor.getPosition()) 
        dy = (centred_positions_dict["sampy"]-self.sampleYMotor.getPosition()) 
-       
-       #dx = centred_positions_dict["sampx"]
-       #dy = centred_positions_dict["sampy"]
        dz = (centred_positions_dict["phiz"]-self.phizMotor.getPosition()) 
 
        beam_pos_x = self.getBeamPosX()
        beam_pos_y = self.getBeamPosY()
 
        x = -dz * self.pixelsPerMmZ / 1000.0 + beam_pos_x
-       y = (-dx * math.cos(phi_angle) + dy * math.sin(phi_angle)) * self.pixelsPerMmY / 1000.0 + beam_pos_y
-
-       logging.info("Converting motor positions to screen positions")
+       y = (dx * math.sin(phi_angle) + dy * math.cos(phi_angle)) * self.pixelsPerMmY / 1000.0 + beam_pos_y
 
        beam_pos_x = self.getBeamPosX()
        beam_pos_y = self.getBeamPosY()
        logging.info("   - phi angle = %s " %  phi_angle)
        logging.info("   - phiz saved = %s " % centred_positions_dict["phiz"])
-       #logging.info("   - pixels per mm X = %s " % self.pixelsPerMmY )
-       #logging.info("   - pixels per mm Y = %s " % self.pixelsPerMmZ )
        logging.info("   - dx = %s ( %s - %s )" % (dx , centred_positions_dict["sampx"],self.sampleXMotor.getPosition()) )
        logging.info("   - dy = %s ( %s - %s )" % ( dy , centred_positions_dict["sampy"],self.sampleYMotor.getPosition())  )
        logging.info("   - dz = %s " % dz )
@@ -424,27 +365,68 @@ class MiniDiffPX1(MiniDiff):
        #self.beamPositionX, self.beamPositionY = self.getBeamPosition(offset)
        self.emit('zoomMotorPredefinedPositionChanged', (positionName, offset, ))
 
+   def start3ClickCentring_nonblocking(self, sample_info=None):
+       self.start3ClickCentring(sample_info=None,wait=False)
+
+   @task
    def start3ClickCentring(self, sample_info=None):
+
        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+ 
+       self.setCentringPhase()
+
        if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
 
-       self.currentCentringProcedure = gevent.spawn(manual_centring, 
-                                                    self.phiMotor,
-                                                    self.phizMotor,
-                                                    self.sampleXMotor,
-                                                    self.sampleYMotor,
-                                                    self.pixelsPerMmY,
-                                                    self.pixelsPerMmZ,
-                                                    self.getBeamPosX(),
-                                                    self.getBeamPosY(),
-                                                    self.kappaMotor,
-                                                    self.kappaPhiMotor)     
+       #self.currentCentringProcedure = gevent.spawn(sample_centring.manual_centring, 
+       self.currentCentringProcedure = sample_centring.manual_centring( {"phi":self.centringPhi,
+                                                     "phiy":self.centringPhiz,
+                                                     "sampx": self.centringSamplex,
+                                                     "sampy": self.centringSampley,
+                                                     "kappa": self.centringKappa,
+                                                     "kappaPhiMotor": self.centringKappaPhi },
+                                                     self.pixelsPerMmY,
+                                                     self.pixelsPerMmZ,
+                                                     self.getBeamPosX(),
+                                                     self.getBeamPosY())
+
        self.currentCentringProcedure.link(self.manualCentringDone)
 
-   def imageClicked(self, x, y, xi, yi):
-       USER_CLICKED_EVENT.set((x,y))
+   def startAutoCentring_nonblocking(self, sample_info=None, loop_only=False):
+       logging.info("Start auto centring in gonio. Non/blocking")
+       self.startAutoCentring(sample_info=None, loop_only=False, wait=False)
+       logging.info("Start auto centring in gonio. Started")
+
+   @task
+   def startAutoCentring(self, sample_info=None, loop_only=False):
+
+        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+        self.setCentringPhase()
+
+        if not self.permit:
+           logging.info("Trying to start centring in gonio. But no permit to operate")
+           return
+
+        self.emitProgressMessage("Starting automatic centring procedure...")
+        self.currentCentringProcedure = sample_centring.start_auto(self.camera,
+                                                                   {"phi":self.centringPhi,
+                                                                    "phiy":self.centringPhiz,
+                                                                    "sampx": self.centringSamplex,
+                                                                    "sampy": self.centringSampley,
+                                                                    "phiz": self.centringPhiz,
+                                                                    "kappa": self.centringKappa,
+                                                                    "kappaPhiMotor": self.centringKappaPhi },
+                                                                   self.pixelsPerMmY, self.pixelsPerMmZ,
+                                                                   self.getBeamPosX(), self.getBeamPosY(),
+                                                                   msg_cb=self.emitProgressMessage,
+                                                                   new_point_cb=lambda point: self.emit("newAutomaticCentringPoint", point))
+
+        self.currentCentringProcedure.link(self.autoCentringDone)
+
+
+   #def imageClicked(self, x, y, xi, yi):
+   #    USER_CLICKED_EVENT.set((x,y))
 
    def getPositions(self):
       logging.debug("getPositions. saving values sampx, sampy, phiz= (%s, %s, %s)" % (self.sampleXMotor.getPosition(), self.sampleYMotor.getPosition(), self.phizMotor.getPosition()))
@@ -503,6 +485,16 @@ class MiniDiffPX1(MiniDiff):
           self.centringStatus["images"] = snapshotsProcedure.get()
 
    def setCentringPhase(self):
+
+       # allow for some time to get sc permit (it may be necessary after loading)
+
+       t0 = time.time() 
+       elapsed = time.time() - t0
+       while elapsed < 5.0:
+           if self.permit:
+               break
+           time.sleep(0.1)
+           elapsed = time.time() - t0
 
        if not self.permit:
            logging.info("Trying to set centring phase. But no permit to operate")

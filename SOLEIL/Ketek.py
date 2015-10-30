@@ -16,7 +16,7 @@ from PyTango import AttributeProxy
 class Ketek(BaseHardwareObjects.Device):
 
     def init(self):
-
+        logging.info("In Ketek_HO.")
         self.devname = self.getProperty("tangoname")
         self.dev = DeviceProxy(self.devname)
 
@@ -68,12 +68,15 @@ class Ketek(BaseHardwareObjects.Device):
 
         self.init_dev()
 
-    def init_dev(self):
+    def init_dev(self, presettype=1, accumulate=0):
         if self.presettype is not None:
-            self.dev.write_attribute('presettype', self.presettype )
+            self.dev.presettype = presettype
+            self.dev.accumulate = accumulate
+            logging.info("Ketek. Set Presettype to %s" % presettype)
 
-        if self.peakingtime is not None:
-            self.dev.write_attribute('peakingtime', self.peakingtime )
+        #if self.peakingtime is not None:
+        #    self.dev.write_attribute('peakingtime', self.peakingtime )
+        #    logging.info("Ketek. Set peakingtime to %s" % self.peakingtime)
 
     def select_channel(self, channo):
         self.channo = channo
@@ -105,6 +108,8 @@ class Ketek(BaseHardwareObjects.Device):
         self.dev.write_attribute('presetValue', float(exptime) )
 
     def set_roi(self,chbeg=0,chend=2048):
+        self.dev.Stop()
+        time.sleep(0.4)
         self.dev.SetROIs( numpy.array((chbeg, chend)) )
 
     def set_roi_kev(self,ebeg,eend):
@@ -114,7 +119,13 @@ class Ketek(BaseHardwareObjects.Device):
         chend = int(eend / (self.calib_b)) 
         self.dev.SetROIs( numpy.array((chbeg, chend)) )
 
-    def start(self):
+    def start(self, timeout=3.):
+        _debut = time.time()
+        while str(self.dev.State()) != 'STANDBY':
+            time.sleep(0.1)
+            if (time.time() - _debut) > timeout:
+                logging.error("Ketek:Start Timeout after %.1f sec" % timeout)                
+                raise Exception
         self.dev.Start()
 
     def expose(self, exptime, wait=True):
@@ -125,9 +136,19 @@ class Ketek(BaseHardwareObjects.Device):
             self.wait()
 
     def wait(self):
-        while self.dev.state().name != 'STANDBY':
-            time.sleep(0.1)
-
+        time.sleep(0.05) # Time for the device to change state.
+        _state = str(self.dev.State())
+        #logging.info("Ketek:Wait Init State: %s" % _state)
+        while _state != 'STANDBY':
+            time.sleep(0.05)
+            _state = str(self.dev.State())
+            #logging.info("Ketek:Wait Loop State: %s" % _state)
+            if self.dev.realTime02 >= (self.dev.presetValue+0.3):
+                self.dev.Stop()
+                logging.info("Ketek:Wait Break Timeout")
+                time.sleep(0.2)
+                break
+            
     def get_spectrum(self):
         return self.get_xvals(), self.get_data()
 
@@ -212,7 +233,6 @@ def main():
 
 if __name__ == '__main__':
     import sys
-    import os
 
     print "Running Ketek tests "
 

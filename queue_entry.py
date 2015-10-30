@@ -422,14 +422,14 @@ class SampleQueueEntry(BaseQueueEntry):
 
     def execute(self):
         BaseQueueEntry.execute(self)
-        log = logging.getLogger('queue_exec')
+        #log = logging.getLogger('queue_exec')
+        log = logging.getLogger('user_level_log')
         sc_used = not self._data_model.free_pin_mode
 
         # Only execute samples with collections and when sample changer is used
         if len(self.get_data_model().get_children()) != 0 and sc_used:
             if self.sample_changer_hwobj is not None:
                 log.info("Loading sample " + self._data_model.loc_str)
-                log.info("Loading sample %s" % self._data_model)
 
                 sample_mounted = self.sample_changer_hwobj.\
                                  is_mounted_sample(self._data_model.location)
@@ -795,6 +795,7 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
         BaseQueueEntry.pre_execute(self)
         char = self.get_data_model()
         reference_image_collection = char.reference_image_collection
+        characterisation_parameters = char.characterisation_parameters
 
         # Trick to make sure that the reference collection has a sample.
         reference_image_collection._parent = char.get_parent()
@@ -809,14 +810,21 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
         dc_qe.set_enabled(True)
         self.enqueue(dc_qe)
 
-        char_qe = CharacterisationQueueEntry(self.get_view(), char,
+        log = logging.getLogger("user_level_log")
+        log.info("using edna: %s" % characterisation_parameters.use_edna)
+        if characterisation_parameters.use_edna:
+           char_qe = CharacterisationQueueEntry(self.get_view(), char,
                                              view_set_queue_entry=False)
-        char_qe.set_enabled(True)
-        self.enqueue(char_qe)
-        self.char_qe = char_qe
+           char_qe.set_enabled(True)
+           self.enqueue(char_qe)
+           self.char_qe = char_qe
 
     def post_execute(self):
-        self.status = self.char_qe.status
+        char = self.get_data_model()
+        if char.characterisation_parameters.use_edna:
+            self.status = self.char_qe.status
+        else:
+            self.status = QUEUE_ENTRY_STATUS.SUCCESS
         BaseQueueEntry.post_execute(self)
 
 
@@ -1184,7 +1192,8 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
 
     if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__')\
        and (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
-        element = '%d:%02d' % loc
+        element = '%d:%02d' % tuple(map(int,loc))
+        #element = '%d:%02d' % loc
         beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
     else:
         beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
@@ -1196,6 +1205,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
     if dm is not None:
         try:
             dm.connect("centringAccepted", centring_done_cb)
+            dm.connect("centringFailed", centring_done_cb)
             centring_method = view.listView().parent().\
                               centring_method
                   

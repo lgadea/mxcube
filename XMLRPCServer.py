@@ -13,6 +13,9 @@ import types
 import gevent
 import socket
 
+from HardwareRepository import HardwareRepository
+from HardwareRepository.BaseHardwareObjects import Equipment
+
 
 from HardwareRepository.BaseHardwareObjects import HardwareObject
 from SimpleXMLRPCServer import SimpleXMLRPCServer
@@ -56,6 +59,8 @@ class XMLRPCServer(HardwareObject):
         try:
             self.open()
         except:
+            import traceback
+            logging.getLogger("HWR").info(traceback.format_exc())
             logging.getLogger("HWR").debug("Can't start XML-RPC server")
         
 
@@ -303,9 +308,9 @@ class XMLRPCServer(HardwareObject):
         return True
 
     def _register_module_functions(self, module_name, recurse=True, prefix=""):
-        #log = logging.getLogger("HWR")
-        #log.info('Registering functions in module %s with XML-RPC server' %
-                            #module_name)
+        log = logging.getLogger("HWR")
+        log.info('Registering functions in module %s with XML-RPC server' %
+                            module_name)
 
         if not sys.modules.has_key(module_name):
             __import__(module_name)
@@ -327,9 +332,9 @@ class XMLRPCServer(HardwareObject):
 
             for f in inspect.getmembers(module, inspect.isfunction):
                 if f[0][0] != '_':
-                    #xmlrpc_name = prefix + f[0]
-                    #log.info('Registering function %s.%s as XML-RPC function %s' %
-                        #(module_name, f[1].__name__, xmlrpc_name) )
+                    xmlrpc_name = prefix + f[0]
+                    log.info('Registering function %s.%s as XML-RPC function %s' %
+                        (module_name, f[1].__name__, xmlrpc_name) )
 
                     # Bind method to this XMLRPCServer instance but don't set attribute
                     # This is sufficient to register it as an xmlrpc function. 
@@ -346,4 +351,29 @@ class XMLRPCServer(HardwareObject):
                         recurse=False, prefix=prefix)
                 except StopIteration:
                     pass
+
+def main():
+    # create the xanes object
+    hwr_directory = os.environ["XML_FILES_PATH"]
+
+    hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
+    hwr.connect()
+
+    server = hwr.getHardwareObject("/xml-rpc-server")
+    print server.start_queue()
+
+
+if __name__ == '__main__':
+    import sys
+    import os
+
+    print "Running XML Server standalone"
+    hwrpath = os.environ.get('XML_FILES_PATH',None)
+
+    if hwrpath is None:
+        print "  -- you should first source the file mxcube.rc to set your environment variables"
+        sys.exit(0)
+    else:
+        main()
+
 

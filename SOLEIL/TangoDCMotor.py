@@ -92,11 +92,16 @@ class TangoDCMotor(Device):
     
     def motorStateChanged(self, state):
         self.stateValue = str(state)
+        self.stateValue = str(self.stateChan.getValue())
+        if self.stateValue not in ["RUNNING","MOVING"]:
+            position = self.positionChan.getValue()
+            self.positionChanged(position)
+
         self.setIsReady(True)
         self.emit('stateChanged', (TangoDCMotor.stateDict[self.stateValue], ))
         
     def getState(self):
-        state = self.stateValue
+        #state = self.stateValue
         return TangoDCMotor.stateDict[self.stateValue]
     
     def getLimits(self):
@@ -112,6 +117,7 @@ class TangoDCMotor(Device):
         self.emit('limitsChanged', (self.getLimits(), )) 
         
     def motorIsMoving(self):
+        self.stateValue = str(self.stateChan.getValue())
         return( self.stateValue == "RUNNING" or self.stateValue == "MOVING" )
 
     def motorMoveDone(self, channelValue):
@@ -132,7 +138,7 @@ class TangoDCMotor(Device):
         return self.getPosition()
     
     def syncMove(self, position):
-        prev_position      = self.getPosition()
+        #prev_position      = self.getPosition()
         self.positionValue = position
 
         time.sleep(0.5) # allow MD2 to change the state
@@ -182,7 +188,7 @@ class TangoDCMotor(Device):
         Arguments:
         absolutePosition -- position to move to
         """
-        logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: type '%s'", absolutePosition, type(absolutePosition))
+        #logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: type '%s'", absolutePosition, type(absolutePosition))
         if type(absolutePosition) != float and type(absolutePosition) != int:
             self.positionChan.setValue(self.convertValue(absolutePosition))
         else:

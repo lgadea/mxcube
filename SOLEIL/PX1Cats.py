@@ -21,6 +21,9 @@ import gevent
 
 from HardwareRepository.TaskUtils import *
 
+from HardwareRepository import HardwareRepository
+from HardwareRepository.BaseHardwareObjects import Equipment
+
 __author__ = "Bixente Rey Bakaikoa"
 __credits__ = ["The MxCuBE collaboration"]
 
@@ -154,6 +157,13 @@ class PX1Cats(SampleChanger):
         """
         return (Pin.__HOLDER_LENGTH_PROPERTY__,)
         
+    def is_mounted_sample(self, sample_location):
+      logging.getLogger().info("checking if sample in location %s is loaded" % str(sample_location))
+      if sample_location == map(str, self.getLoadedSample().getCoords()):
+        return True
+      else:
+        return False
+
     #########################           TASKS           #########################
 
     def getLoadedSampleDataMatrix(self):
@@ -285,6 +295,12 @@ class PX1Cats(SampleChanger):
                  sample = selected
             else:
                raise Exception("No sample selected")
+
+        if selected==self.getLoadedSample():
+            logging.info("PX1Cats. trying to load an already loaded sample. nothing to do" )
+            self._waitDeviceState( [SampleChangerState.Ready, SampleChangerState.StandBy],  )
+            logging.info("PX1Cats._executeServerTask. Done with waiting.")
+            return True
 
         # calculate CATS specific lid/sample number
         lid, sample = self._getLidSampleFromSelected(selected)
@@ -909,4 +925,28 @@ class PX1Cats(SampleChanger):
         
 	self._incoherentGonioSampleState = value
 
+
+def main():
+    # create the xanes object
+    hwr_directory = os.environ["XML_FILES_PATH"]
+
+    hwr = HardwareRepository.HardwareRepository(os.path.abspath(hwr_directory))
+    hwr.connect()
+
+    sc = hwr.getHardwareObject("/cryotong")
+    print sc.getLoadedSample().getCoords()
+
+
+if __name__ == '__main__':
+    import sys
+    import os
+
+    print "Running PX1Cats standalone"
+    hwrpath = os.environ.get('XML_FILES_PATH',None)
+
+    if hwrpath is None:
+        print "  -- you should first source the file mxcube.rc to set your environment variables"
+        sys.exit(0)
+    else:
+        main()
 

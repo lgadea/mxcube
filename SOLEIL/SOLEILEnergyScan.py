@@ -125,7 +125,7 @@ class SOLEILEnergyScan(Equipment):
         self.emit('setElement', (self._element, self._edge))
         
     def newPoint(self, x, y):
-        logging.getLogger("HWR").debug('EnergyScan:newPoint')
+        #logging.getLogger("HWR").debug('EnergyScan:newPoint')
         logging.info('EnergyScan newPoint %s, %s' % (x, y))
         self.emit('addNewPoint', (x, y))
         self.emit('newScanPoint', (x, y))
@@ -290,25 +290,23 @@ class SOLEILEnergyScan(Equipment):
         logging.info('SOLEILEnergyScan doChooch rawScanFile %s, scanFile %s' % (rawScanFile, scanFile))
 
         scanData = self.xanes_ho.getRawData()
-        logging.info('scanData %s' % scanData)
+        #logging.info('scanData %s' % scanData)
         logging.info('PyChooch file %s' % PyChooch.__file__)
         pk, fppPeak, fpPeak, ip, fppInfl, fpInfl, chooch_graph_data = PyChooch.calc(scanData, elt, edge, scanFile)
         rm=(pk+30)/1000.0
         pk=pk/1000.0
         savpk = pk
         ip=ip/1000.0
-        comm = ""
 
         self.thEdge = self.xanes_ho.getElementEdge()
         logging.getLogger("HWR").info("th. Edge %s ; chooch results are pk=%f, ip=%f, rm=%f" % (self.thEdge, pk,ip,rm))
-        logging.info('math.fabs(self.thEdge - ip) %s' % math.fabs(self.thEdge - ip))
-        logging.info('self.thEdgeThreshold %s' % self.thEdgeThreshold)
+        #logging.info('math.fabs(self.thEdge - ip) %s' % math.fabs(self.thEdge - ip))
+        #logging.info('self.thEdgeThreshold %s' % self.thEdgeThreshold)
         if math.fabs(self.thEdge - ip) > self.thEdgeThreshold:
-          logging.info('Theoretical edge too different from the one just determined')
+          logging.info('SOLEILEnergyScan. Theoretical edge too different from the one just determined. thEdgeThreshold = %.2f' % self.thEdgeThreshold)
           pk = 0
           ip = 0
           rm = self.thEdge + 0.03
-          comm = 'Calculated peak (%f) is more that 10eV away from the theoretical value (%f). Please check your scan' % (savpk, self.thEdge)
    
           logging.getLogger("HWR").warning('EnergyScan: calculated peak (%f) is more that 20eV %s the theoretical value (%f). Please check your scan and choose the energies manually' % (savpk, (self.thEdge - ip) > 0.02 and "below" or "above", self.thEdge))
 
@@ -356,13 +354,13 @@ class SOLEILEnergyScan(Equipment):
         self.scanInfo["peakFDoublePrime"]=fppPeak
         self.scanInfo["inflectionFPrime"]=fpInfl
         self.scanInfo["inflectionFDoublePrime"]=fppInfl
-        self.scanInfo["comments"] = comm
-        logging.info('self.scanInfo %s' % self.scanInfo)
+        self.scanInfo["comments"] = ""
+        #logging.info('self.scanInfo %s' % self.scanInfo)
         
-        logging.info('chooch_graph_data %s' % str(chooch_graph_data))
+        #logging.info('chooch_graph_data %s' % str(chooch_graph_data))
         chooch_graph_x, chooch_graph_y1, chooch_graph_y2 = zip(*chooch_graph_data)
         chooch_graph_x = list(chooch_graph_x)
-        logging.info('chooch_graph_x %s' %  str(chooch_graph_x))
+        #logging.info('chooch_graph_x %s' %  str(chooch_graph_x))
         for i in range(len(chooch_graph_x)):
           chooch_graph_x[i]=chooch_graph_x[i]/1000.0
 

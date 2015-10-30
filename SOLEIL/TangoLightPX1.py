@@ -30,7 +30,8 @@ class TangoLightPX1(Device):
         #logging.getLogger("HWR").info(('TangoLightPX1. minimum Detector '
         #                + 'distance for light_Arm insertion: %.1f mm') % \
         #                                   self.min_detector_distance)
-        self.environment = self.getObjectByRole("environment")
+        #self.environment = self.getObjectByRole("environment")
+
         self.px1env = dp(self.px1environment_dev)
         self.light = dp(self.light_dev)
 

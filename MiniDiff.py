@@ -462,13 +462,15 @@ class MiniDiff(Equipment):
         else:
           positions = self.zoomMotor.getPredefinedPositionsList()
           i = len(positions) / 2
-          self.zoomMotor.moveToPosition(positions[i-1])
+          #self.zoomMotor.moveToPosition(positions[i-1])
 
           #be sure zoom stop moving
-          while self.zoomMotor.motorIsMoving():
-              time.sleep(0.1)
+          #while self.zoomMotor.motorIsMoving():
+          #    time.sleep(0.1)
 
           self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+
+          self.centredTime = time.time()
 
           if self.user_confirms_centring:
             self.emitCentringSuccessful()

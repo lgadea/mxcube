@@ -28,10 +28,10 @@ class Xanes(BaseHardwareObjects.Device):
                  prefix='x5',
                  session_id=None,
                  blsample_id=None,
-                 nbSteps=100,
-                 roiwidth=0.25,
-                 beforeEdge=0.025,
-                 afterEdge=0.075,
+                 nbSteps=80,
+                 roiwidth=0.30,
+                 beforeEdge=0.035,
+                 afterEdge=0.045,
                  integrationTime=1,
                  peakingTime=2.5,
                  dynamicRange=20000, #47200
@@ -46,7 +46,7 @@ class Xanes(BaseHardwareObjects.Device):
                  transmission_max=0.05,
                  epsilon=1e-4,
                  channelToeV=10.,
-                 test=True,
+                 test=False,
                  save=True,
                  plot=True,
                  expert=False):
@@ -88,10 +88,12 @@ class Xanes(BaseHardwareObjects.Device):
         self.Abort = False
         self.newPoint = False
         self.expert = expert
-
+       
         #test specifics
         if self.getProperty("mode") == 'test':
             self.integrationTime = 0.01
+        logging.info('Xanes_HO. In Setup method.')
+
 
     def init(self):
         # Initialize all the devices used throughout the collect
@@ -256,6 +258,7 @@ class Xanes(BaseHardwareObjects.Device):
         return A, B, C
         
     def setROI(self):
+        #self.fluodet.set_roi
         if self.test: return
         A, B, C = self.get_calibration()
         self.roi_center += A # A + B*self.roi_center + C*self.roi_center**2
@@ -270,7 +273,7 @@ class Xanes(BaseHardwareObjects.Device):
         self.channel_debut = channel_debut
         self.roi_debut = roi_debut
         self.roi_fin = roi_fin
-
+        logging.info('XANES: setROI chanel start %d end %d' % (channel_debut, channel_fin))
         self.fluodet.set_roi(channel_debut, channel_fin)
 
     # You may want to adapt to your beamline in PX1Xanes
@@ -406,14 +409,14 @@ class Xanes(BaseHardwareObjects.Device):
         self.wait(self.mono)
 
     def setBLE(self, energy):
-        logging.info('setBLE')
+        #logging.info('setBLE')
         if self.test: return                                   
         if abs(self.ble.read_attribute('energy').w_value - self.BleVsEnStrings[energy]) > 0.001:
-            print 'setting undulator energy', energy
-            print 'self.BleVsEn[energy]', self.BleVsEnStrings[energy]
+            logging.info('XANES: Setting undulator energy %.4f' % float(energy))
+            logging.info('self.BleVsEn[energy] %.4f ' % self.BleVsEnStrings[energy])
             self.ble.write_attribute('energy', self.BleVsEnStrings[energy])
             self.wait(self.ble)
-            if self.undulatorOffset != 0:
+            if self.undulatorOffset:
                 self.undulator.gap += self.undulatorOffset
                 self.wait(self.undulator)
             
@@ -532,13 +535,14 @@ class Xanes(BaseHardwareObjects.Device):
         if self.test:
             time.sleep(self.integrationTime)
             return
-
+        
         self.openFastShutter()
-
+        
         self.fluodet.start()
         self.fluodet.wait()
-
+        #self.fluodet.stop()
         self.closeFastShutter()
+        
         
     def takePoint(self, en):
         logging.info('takePoint %s' % en)

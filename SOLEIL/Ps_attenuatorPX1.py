@@ -59,7 +59,7 @@ class Ps_attenuatorPX1(Device):
 #                value = float(self.Attenuatordevice.TrueTrans_FP)
 #            else :    
 #                value = float(self.Attenuatordevice.T)
-            value = float(self.Attenuatordevice.TrueTrans_FP)
+            value = round(float(self.Attenuatordevice.TrueTrans_FP),1)
         except:
             logging.getLogger("HWR").error('%s getAttFactor : received value on channel is not a float value', str(self.name()))
             value=None
