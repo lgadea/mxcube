@@ -8,10 +8,12 @@ import os
 import tempfile
 
 try:
-  import lucid2
+  import lucid2 as lucid
 except ImportError:
-  logging.warning("lucid2 cannot load: automatic centring is disabled")
-
+  try:
+      import lucid
+  except ImportError:
+      logging.warning("Could not find autocentring library, automatic centring is disabled")
 
 def multiPointCentre(z,phis) :
     fitfunc = lambda p,x: p[0] * numpy.sin(x+p[1]) + p[2]
