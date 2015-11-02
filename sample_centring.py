@@ -8,9 +8,9 @@ import os
 import tempfile
 
 try:
-  import lucid
+  import lucid2
 except ImportError:
-  logging.warning("lucid cannot load: automatic centring is disabled")
+  logging.warning("lucid2 cannot load: automatic centring is disabled")
 
 
 def multiPointCentre(z,phis) :
@@ -339,10 +339,10 @@ def find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb,phipos):
   #os.system("cp %s %s" % (snapshot_filename, snapshot_savename))
 
   try:
-      info, x, y = lucid.find_loop(snapshot_filename, pixels_per_mm_horizontal=pixelsPerMm_Hor)
+      info, x, y = lucid2.find_loop(snapshot_filename, pixels_per_mm_horizontal=pixelsPerMm_Hor)
   except:
       import traceback
-      logging.info("lucid found an exception while executing:  %s" % traceback.format_exc())
+      logging.info("lucid2 found an exception while executing:  %s" % traceback.format_exc())
       info, x, y = ("",-1,-1)
       
   
