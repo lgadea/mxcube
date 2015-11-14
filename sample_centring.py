@@ -8,16 +8,19 @@ import os
 import tempfile
 
 try:
-  import lucid
+  import lucid2 as lucid
 except ImportError:
-  logging.warning("lucid cannot load: automatic centring is disabled")
-
+  try:
+      import lucid
+  except ImportError:
+      logging.warning("Could not find autocentring library, automatic centring is disabled")
 
 def multiPointCentre(z,phis) :
     fitfunc = lambda p,x: p[0] * numpy.sin(x+p[1]) + p[2]
     errfunc = lambda p,x,y: fitfunc(p,x) - y
     p1, success = optimize.leastsq(errfunc,[1.,0.,0.],args = (phis,z))
     return p1
+
 
 USER_CLICKED_EVENT = None
 CURRENT_CENTRING = None
@@ -339,7 +342,7 @@ def find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb,phipos):
   #os.system("cp %s %s" % (snapshot_filename, snapshot_savename))
 
   try:
-      info, x, y = lucid.find_loop(snapshot_filename, pixels_per_mm_horizontal=pixelsPerMm_Hor)
+      info, x, y = lucid.find_loop(snapshot_filename)
   except:
       import traceback
       logging.info("lucid found an exception while executing:  %s" % traceback.format_exc())
