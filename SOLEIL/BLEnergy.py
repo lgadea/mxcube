@@ -193,7 +193,8 @@ class BLEnergy (Device) :
         else :
             return None    
             
-    def startMoveEnergy(self, value, wait=False):   
+    def startMoveEnergy(self, value, wait=False):
+        value = float(value)
         logging.getLogger("HWR").debug("%s: BLEnergy.startMoveEnergy: %.3f", self.name(), value)
     
         # MODIFICATION DE CETTE FONCTION POUR COMPENSER LE PROBLEME D'HYSTERESIS DE L"ONDULEUR
@@ -241,8 +242,8 @@ class BLEnergy (Device) :
     
 
     def startMoveWavelength(self, value, wait=False):
-        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %.3f", self.name(), value)
-        self.monodevice.simLambda = value
+        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %s", self.name(), value)
+        self.monodevice.simLambda = float(value)
         self.startMoveEnergy(self.monodevice.simEnergy)
 #        return self.startMoveEnergy(energy_val)
 	return value
