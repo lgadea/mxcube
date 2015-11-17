@@ -159,11 +159,10 @@ class PX1Cats(SampleChanger):
         return (Pin.__HOLDER_LENGTH_PROPERTY__,)
         
     def is_mounted_sample(self, sample_location):
-      logging.getLogger().info("checking if sample in location %s is loaded" % str(sample_location))
-      if sample_location == map(str, self.getLoadedSample().getCoords()):
-        return True
-      else:
-        return False
+        try:
+            return sample_location ==  tuple(map(str,self.getLoadedSample().getCoords()))
+        except AttributeError:
+            return False 
 
     #########################           TASKS           #########################
 
