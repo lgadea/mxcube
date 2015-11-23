@@ -928,10 +928,10 @@ class CentredPosition(object):
             except KeyError:
                 pass
 
-            try:
-                self.kappa = motor_dict['kappa']
-            except KeyError:
-                pass
+            #try:
+            #    self.kappa = motor_dict['kappa']
+            #except KeyError:
+            #    pass
 
             try:
                 self.kappa_phi = motor_dict['kappa_phi']

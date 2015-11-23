@@ -131,7 +131,7 @@ class BLEnergy (Device) :
             return None
     
     def getState(self):
-        return self.BLEnergydevice.State().name
+        return str(self.BLEnergydevice.State())
 
     def getEnergyComputedFromCurrentGap(self):
         #logging.getLogger("HWR").debug("%s: BLEnergy.getCurrentEnergy", self.name())
@@ -193,41 +193,42 @@ class BLEnergy (Device) :
         else :
             return None    
             
-    def startMoveEnergy(self, value, wait=False):   
+    def startMoveEnergy(self, value, wait=False):
+        value = float(value)
         logging.getLogger("HWR").debug("%s: BLEnergy.startMoveEnergy: %.3f", self.name(), value)
     
         # MODIFICATION DE CETTE FONCTION POUR COMPENSER LE PROBLEME D'HYSTERESIS DE L"ONDULEUR
         # PAR CETTE METHODE ON APPLIQUE TOUJOURS UN GAP CROISSANT
-        backlash = 0.1 # en mm
-        gaplimite = 5.5  # en mm
+        #backlash = 0.1 # en mm
+        #gaplimite = 5.5  # en mm
 
         if (  str( self.BLEnergydevice.State() ) != "MOVING" and self.deviceOk) :
             if self.doBacklashCompensation:
-                try : 
+                try :
                     # Recuperation de la valeur de gap correspondant a l'energie souhaitee
-                    self.U20Energydevice.autoApplyComputedParameters = False
+                    #self.U20Energydevice.autoApplyComputedParameters = False
                     self.U20Energydevice.energy = value
-                    newgap = self.U20Energydevice.computedGap
-                    actualgap = self.U20Energydevice.gap
+                    #newgap = self.U20Energydevice.computedGap
+                    #actualgap = self.U20Energydevice.gap
 
                     self.U20Energydevice.autoApplyComputedParameters = True
                 
                     # On applique le backlash que si on doit descendre en gap	    
-                    if newgap < actualgap + backlash:
+                    #if newgap < actualgap + backlash:
                         # Envoi a un gap juste en dessous (backlash)    
-                        if newgap-backlash > gaplimite :
-                            self.U20Energydevice.gap = newgap - backlash
-                        else :
-                            self.U20Energydevice.gap = gaplimite
-                            self.U20Energydevice.gap = newgap + backlash
-                        time.sleep(1)
+                        #if newgap-backlash > gaplimite :
+                        #    self.U20Energydevice.gap = newgap - backlash
+                        #else :
+                        #    self.U20Energydevice.gap = gaplimite
+                        #    self.U20Energydevice.gap = newgap + backlash
+                        #time.sleep(1)
                 except :           
                     logging.getLogger("HWR").error("%s: Cannot move undulator U20 : State device = %s", self.name(), str(self.U20Energydevice.State()))
 
             try :
                 # Envoi a l'energie desiree    
                 self.BLEnergydevice.energy = value
-		return value
+                return value
             except :           
                 logging.getLogger("HWR").error("%s: Cannot move BLEnergy : State device = %s", self.name(), str( self.BLEnergydevice.State() ))
         
@@ -241,8 +242,8 @@ class BLEnergy (Device) :
     
 
     def startMoveWavelength(self, value, wait=False):
-        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %.3f", self.name(), value)
-        self.monodevice.simLambda = value
+        logging.getLogger("HWR").debug("%s: BLEnergy.startMoveWavelength: %s", self.name(), value)
+        self.monodevice.simLambda = float(value)
         self.startMoveEnergy(self.monodevice.simEnergy)
 #        return self.startMoveEnergy(energy_val)
 	return value

@@ -461,12 +461,13 @@ class MiniDiff(Equipment):
           self.emitCentringFailed()
         else:
           positions = self.zoomMotor.getPredefinedPositionsList()
-          i = len(positions) / 2
+          #i = len(positions) / 5
           #self.zoomMotor.moveToPosition(positions[i-1])
-
+          self.zoomMotor.moveToPosition(positions[1])
+          
           #be sure zoom stop moving
-          #while self.zoomMotor.motorIsMoving():
-          #    time.sleep(0.1)
+          while self.zoomMotor.motorIsMoving():
+              time.sleep(0.1)
 
           self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
 
@@ -516,10 +517,13 @@ class MiniDiff(Equipment):
         self.emit('centringAccepted', (True,self.getCentringStatus()))
 
     def rejectCentring(self):
+        logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> rejectCentring in MINIDIFF    >>>>>")
         if self.currentCentringProcedure:
           self.currentCentringProcedure.kill()
         self.centringStatus={"valid":False}
-        self.emitProgressMessage("")
+        #self.centringStatus["valid"]=False
+        #self.centringStatus["accepted"]=False
+        #self.emitProgressMessage("")
         self.emit('centringAccepted', (False,self.getCentringStatus()))
 
     def emitCentringMoving(self):

@@ -115,19 +115,20 @@ class PX1Cats(SampleChanger):
         for channel_name in ("_chnState", "_chnStatus", \
                              "_chnLidState", "_chnPathRunning", \
                              "_chnPowered", "_chnSafeNeeded", \
-                             "_chnToolOpen", "_chnLN2Regulation", \
+                             "_chnLN2Regulation", \
                              "_chnSoftAuth",  \
                              "_chnPathRunning", "_chnMessage", \
                              "_chnNumLoadedSample", "_chnLidLoadedSample", \
                              "_chnSampleBarcode", "_chnSampleIsDetected",
 			     "_chnDryAndSoakNeeded", "_chnIncoherentGonioSampleState"):
             setattr(self, channel_name, self.getChannelObject(channel_name))
+#                             "_chnToolOpen", "_chnLN2Regulation", \
            
         self._chnLidState.connectSignal("update", self._updateLidState)
         self._chnPowered.connectSignal("update", self._updatePoweredState)
         self._chnSafeNeeded.connectSignal("update", self._updateSafeNeeded)
         self._chnLN2Regulation.connectSignal("update", self._updateRegulationState)
-        self._chnToolOpen.connectSignal("update", self._updateToolOpen) 
+        #self._chnToolOpen.connectSignal("update", self._updateToolOpen) 
         self._chnSoftAuth.connectSignal("update", self._softwareAuthorization) 
         self._chnPathRunning.connectSignal("update", self._updateRunningState)
         self._chnMessage.connectSignal("update", self._updateMessage)
@@ -157,12 +158,15 @@ class PX1Cats(SampleChanger):
         """
         return (Pin.__HOLDER_LENGTH_PROPERTY__,)
         
-    def is_mounted_sample(self, sample_location):
-      logging.getLogger().info("checking if sample in location %s is loaded" % str(sample_location))
-      if sample_location == map(str, self.getLoadedSample().getCoords()):
-        return True
-      else:
-        return False
+    def is_mounted_sample(self, sample_location):        
+        try:
+            if sample_location == tuple(map(str,self.getLoadedSample().getCoords())):
+                return True
+            else:
+                return False
+        except AttributeError:
+            logging.warning("PX1Cats. is_mounted_sample error.")
+            return False 
 
     #########################           TASKS           #########################
 
@@ -838,10 +842,11 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        if state:
-            self._chnToolOpen.setValue(True)
-        else:
-            self._chnToolOpen.setValue(False)
+        #if state:
+        #    self._chnToolOpen.setValue(True)
+        #else:
+        #    self._chnToolOpen.setValue(False)
+        return
 
     def _updateGlobalState(self):
         """
@@ -897,13 +902,14 @@ class PX1Cats(SampleChanger):
              self.emit('powerStateChanged', (value, ))
 
     def _updateToolOpen(self, value=None):
+        #logging.info("PX1Cats1. _updateToolOpen Value: %s" % value)
         if value is None:
-             value = self._chnToolOpen.getValue()
-
+             #value = self._chnToolOpen.getValue()
+             pass
         #self._toolState = value
-        if self._toolState != value:
-             self._toolState = value
-             self.emit('toolOpenChanged', (value, ))
+        #if self._toolState != value:
+        #     self._toolState = value
+        #     self.emit('toolOpenChanged', (value, ))
 
     def _updateLidState(self, value=None):
         if value is None:

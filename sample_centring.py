@@ -21,6 +21,7 @@ def multiPointCentre(z,phis) :
     p1, success = optimize.leastsq(errfunc,[1.,0.,0.],args = (phis,z))
     return p1
 
+
 USER_CLICKED_EVENT = None
 CURRENT_CENTRING = None
 SAVED_INITIAL_POSITIONS = {}
@@ -341,7 +342,7 @@ def find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb,phipos):
   #os.system("cp %s %s" % (snapshot_filename, snapshot_savename))
 
   try:
-      info, x, y = lucid2.find_loop(snapshot_filename, pixels_per_mm_horizontal=pixelsPerMm_Hor)
+      info, x, y = lucid.find_loop(snapshot_filename)
   except:
       import traceback
       logging.info("lucid2 found an exception while executing:  %s" % traceback.format_exc())
@@ -380,7 +381,7 @@ def auto_center(camera,
     
     logging.info("in autocentre loop found (at start time) ")
 
-    for k in range(2):
+    for k in range(1):
       if callable(msg_cb):
             msg_cb("Doing automatic centring")
             
