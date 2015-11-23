@@ -51,8 +51,16 @@ class TunableEnergy:
 
     @task
     def set_energy(self, energy):
+        logging.info("<TunableEnergy> Set to energy: %s" % energy)
         energy_obj = self.bl_control.energy
-        return energy_obj.startMoveEnergy(energy)
+        
+        t0 = time.time()        
+        energy_obj.startMoveEnergy(energy)
+        time.sleep(0.5)
+        while energy_obj.getState() in ["MOVING",]:
+            time.sleep(0.2)
+        logging.info("<TunableEnergy> Energy changed in: %.1f sec" % (time.time()-t0))
+        return energy_obj.getCurrentEnergy()
 
     def getCurrentEnergy(self):
         return self.bl_control.energy.getCurrentEnergy()
@@ -77,6 +85,7 @@ class PixelDetector:
 
     @task
     def prepare_acquisition(self, take_dark, start, osc_range, exptime, npass, number_of_images, comment=""):
+        logging.info("<PX1 MultiCollect> prepare_acquisition")
         self.new_acquisition = True
         self.cimg = self.collectServer.currentImageSpi
         if  osc_range < 0.0001:
@@ -101,21 +110,37 @@ class PixelDetector:
             logging.info("<PX1 MultiCollect> WAIT_COLLECT State: %s" % _state)
             time.sleep(0.2)
             _state = self.collectServer.State()
-    
+
+    def do_recalibration(self, energy):
+        energy = float(energy)
+        logging.info("<PX1 MultiCollect> PixelDectector.do_recalibration for %.4f KeV" % energy)
+        # tester si la difference entre currentEnergy et energy necessite la recalibration.
+        PILATUS_THRESHOLD_MIN = 3774. # en eV
+        ENERGY_CALIBRATION_MIN = 7.6  # en keV
+        oldThreshold = self.pilatusServer.threshold
+        nrj_diff = energy - 2*oldThreshold/1000.
+        if (oldThreshold == PILATUS_THRESHOLD_MIN and energy < ENERGY_CALIBRATION_MIN):
+            logging.warning("Re-calibration of Pilatus detector not possible: THRESHOLD_MIN condition.")
+            return
+        elif ( nrj_diff < (-0.08*(2*oldThreshold/1000.)) or \
+               nrj_diff > (0.05*(2*oldThreshold/1000.))):
+            if str(self.pilatusServer.State()) != "STANDBY":
+                logging.getLogger("user_level_log").error("Re-calibration of Pilatus detector not possible.")
+                return
+            self.pilatusServer.SetEnergy(int(energy*1000))
+            time.sleep(0.2)
+            if self.pilatusServer.State() != "STANDBY":
+                logging.getLogger("user_level_log").info("Calibration of Pilatus detector in progress (takes about 1 minute).")
+
+    @task    
     def wait_recalibration(self):
         # Verify the Energy calibration status and re-calibrate if necessary
-        _state = self.pilatusServer.State()
         _threshold = self.pilatusServer.threshold
-        _current_energy = self.bl_control.resolution.currentEnergy
-        _env_state = self.environment_hwo.readState()
-        logging.info("<PX1 MultiCollect> WAIT_PilatusServer State: %s Threshold %.1f energy %.3f" % (_state, _threshold, _current_energy))
-        logging.info("<PX1 MultiCollect> WAIT_PX1Env State 1: %s" % _env_state)
-        if "Calibration Pilatus" in self.pilatusServer.Status():
-            logging.getLogger("user_level_log").info("Calibration of Pilatus detector in progress (takes about 1 minute).")
-        
-        while str(_env_state) != "ON":
-            time.sleep(1)
-            _env_state = self.environment_hwo.readState()
+        _env_state = str(self.pilatusServer.State())
+        logging.info("<PX1 MultiCollect> WAIT_PilatusServer State: %s Threshold %.1f" % (_env_state, _threshold))        
+        while str(_env_state) != "STANDBY":
+            time.sleep(2)
+            _env_state = str(self.pilatusServer.State())
             logging.info("<PX1 MultiCollect>  PX1Env State 2: %s" % _env_state)        
         
     def prepare_detector_header(self,take_dark, start, osc_range, exptime, npass, number_of_images, comment):
@@ -473,6 +498,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         self.close_safty_shutter = self.getProperty("close_safty_shutter") 
         
         self.collectServer.collectAxis = "Phi"
+        self.collectServer.set_timeout_millis(5000)
 
         self.imgtojpeg = self.getProperty("imgtojpeg")
         self._detector.imgtojpeg = self.imgtojpeg
@@ -613,6 +639,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def data_collection_hook(self, data_collect_parameters):
         self.dcpars = copy.copy(data_collect_parameters)
         logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
+        # Do Pilatus Recalibration is needed
+        self._detector.do_recalibration(self.dcpars["energy"])
         if 'experiment_type' in self.dcpars:
             logging.info("<PX1 MultiCollect> in data_collection_hook, experiment type: %s" % self.dcpars['experiment_type'])
  
@@ -624,13 +652,15 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         return self._tunable_bl.set_wavelength(wavelength)
 
     def set_energy(self, energy):
+        energy = float(energy)
+        logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
         return self._tunable_bl.set_energy(energy)
 
     @task
     def set_resolution(self, new_resolution):
         logging.info("<PX1 MultiCollect> TEST - set_resolution")
         self.bl_control.resolution.move(new_resolution)
-        time.sleep(1)
+        time.sleep(0.5)
         logging.info("<PX1 MultiCollect> detector_state: %s" % self.bl_control.detector_distance.stateValue)
         t0 = time.time()
         while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
@@ -708,15 +738,16 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
                   continue
                 motor_position_dict[motor]=position
             try:
-	        # Do not move kappa for now. 
-                if str(motor) == "kappa":
-                    logging.getLogger().info("PX1 MultiCollect. DO NOT MOVE motor: %s to %s " % (motor, position))
-                    break
+	        # Do not move kappa for now.
+                motor_str = str(motor.getMotorMnemonic())
+                if "kappa" in motor_str or "phi" in motor_str:
+                    logging.getLogger().info("... NOT moving motor: %s" % motor_str)
+                else:
+                    logging.getLogger().info("... moving motor '%s' to %f", motor_str, position)
+                    motor.move(position)
             except:
-                logging.getLogger().error("PX1 MultiCollect. Error adding exception on KAPP")
+                logging.getLogger().error("PX1 MultiCollect. Error adding exception on KAPPA")
              
-            logging.getLogger("HWR").info("Moving motor '%s' to %f", motor.getMotorMnemonic(), position)
-            motor.move(position)
 
         while any([motor.motorIsMoving() for motor in motor_position_dict.iterkeys()]):
             logging.getLogger("HWR").info("Waiting for end of motors motion")
@@ -891,6 +922,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def get_machine_message(self):
         logging.info("<PX1 MultiCollect> getting machine message" )
         if  self.bl_control.machine_current is not None:
+            logging.info("<<<<<<<<< PX1 MultiCollect    >>>>>>>>> getting machine message %s" %  self.bl_control.machine_current.getMessage())
             msg = self.bl_control.machine_current.getMessage()
             try: 
                amsg = msg.encode('ascii', 'replace')
