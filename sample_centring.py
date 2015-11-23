@@ -381,7 +381,7 @@ def auto_center(camera,
     
     logging.info("in autocentre loop found (at start time) ")
 
-    for k in range(2):
+    for k in range(1):
       if callable(msg_cb):
             msg_cb("Doing automatic centring")
             
