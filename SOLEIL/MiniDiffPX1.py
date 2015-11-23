@@ -80,10 +80,10 @@ class MiniDiffPX1(MiniDiff):
        if self.sampleChanger is not None:
             self.scAuthChan = self.sampleChanger.getChannelObject("_chnSoftAuth")
             self.scAuthChan.connectSignal("update", self.SCauthorizationChanged )
-            logging.getLogger().info("MiniDiffPX1. Connection to authorization signal done")
+            logging.getLogger().info(" >>>>>>>>>>>  MiniDiffPX1. Connection to authorization signal done")
                     #self.connect(self.samplechanger, "gonioMovementAuthorized", self.SCauthorizationChanged )
        else:
-            logging.getLogger().info("MiniDiffPX1. Cannot connect authorization signal. NO samplechanger")
+            logging.getLogger().info("ERROR >>>>>> MiniDiffPX1. Cannot connect authorization signal. NO samplechanger")
 
        # some defaults
        self.anticipation  = 1
@@ -118,17 +118,18 @@ class MiniDiffPX1(MiniDiff):
        #self.guillotine.setOut()
 
    def SCauthorizationChanged(self, value):
+       logging.getLogger("HWR").info(">>>>>>>> SCauthorizationChanged >>>>>>>>>>>>>>>>>>>>>>>>>>>>.%s: MiniDiff. Authorization from SC changed. Now is %s.", self.name(), value )              
        self.setAuthorizationFlag("samplechanger", value)
-       logging.getLogger("HWR").debug("%s: MiniDiff. Authorization from SC changed. Now is %s.", self.name(), value )
-
+       #from SampleChanger
    def setAuthorizationFlag(self, flag, value):
+       logging.getLogger("HWR").info("<<<<<<<< setAuthorizationFlag <<<<<<<<<<<<<<<<<<<<,  flag ; %s - value :.%s", flag, value)
+       
        if flag == "samplechanger":
             self.sc_permit = value
 
        # make here the logic with eventually other permits (like hardware permit)
-
        self.permit = self.sc_permit
-
+       #self.permit = True
        self.emit("operationPermitted", self.permit)
 
    def getAuthorizationState(self):
@@ -370,7 +371,7 @@ class MiniDiffPX1(MiniDiff):
 
    @task
    def start3ClickCentring(self, sample_info=None):
-
+       logging.getLogger("HWR").info(">>>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
  
        self.setCentringPhase()
