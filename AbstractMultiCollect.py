@@ -463,7 +463,7 @@ class AbstractMultiCollect(object):
 
         data_collect_parameters['xds_dir'] = self.xds_directory
 
-	sample_id, sample_location, sample_code = self.get_sample_info_from_parameters(data_collect_parameters)
+        sample_id, sample_location, sample_code = self.get_sample_info_from_parameters(data_collect_parameters)
         data_collect_parameters['blSampleId'] = sample_id
 
         if self.bl_control.sample_changer is not None:
@@ -886,6 +886,7 @@ class AbstractMultiCollect(object):
         Type           : method
     """
     def trigger_auto_processing(self, process_event, xds_dir, EDNA_files_dir=None, anomalous=None, residues=200, inverse_beam=False, do_inducedraddam=False, spacegroup=None, cell=None):
+      logging.getLogger().info("AbstractMultiCollect  trigger_auto_processing >>>>>>>>>>  ")
       # quick fix for anomalous, do_inducedraddam... passed as a string!!!
       # (comes from the queue)
       if type(anomalous) == types.StringType:
@@ -902,18 +903,18 @@ class AbstractMultiCollect(object):
       # use default of 200
       if residues == 0:
           residues = 200
-
+      processAnalyseParams = {}
       try:
         if type(xds_dir) == types.ListType:
             processAnalyseParams["collections_params"] = xds_dir
         else:
             processAnalyseParams['datacollect_id'] = self.collection_id
             processAnalyseParams['xds_dir'] = xds_dir
-        processAnalyseParams['anomalous'] = anomalous
-        processAnalyseParams['residues'] = residues
-        processAnalyseParams['inverse_beam']= inverse_beam
-        processAnalyseParams["spacegroup"]=spacegroup
-        processAnalyseParams["cell"]=cell
+            processAnalyseParams['anomalous'] = anomalous
+            processAnalyseParams['residues'] = residues
+            processAnalyseParams['inverse_beam']= inverse_beam
+            processAnalyseParams["spacegroup"]=spacegroup
+            processAnalyseParams["cell"]=cell
       except Exception,msg:
         logging.getLogger().exception("DataCollect:processing: %r" % msg)
       else:
