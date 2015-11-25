@@ -277,17 +277,22 @@ class PixelDetector:
                   logging.getLogger("user_level_log").info("<PX1 MultiCollect> Characterization started")
                   logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
                   for nstart in range(self.dcpars['oscillation_sequence'][0]['number_of_images']):
+                      NIMAGE = 10
+                      osc_range = float(self.dcpars['oscillation_sequence'][0]['range'])/NIMAGE
+                      exp_time = float(self.dcpars['oscillation_sequence'][0]['exposure_time'])/NIMAGE
                       self.collectServer.startAngle = start
-                      self.collectServer.numberOfImages = 1
-                      self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (nstart+1)
+                      self.collectServer.numberOfImages = int(NIMAGE)
+                      self.collectServer.imageWidth = osc_range
+                      self.collectServer.exposurePeriod = exp_time
+                      self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (start/self.collectServer.imageWidth + 1)
                       logging.info("<PX1 MultiCollect> CHARACTERIZATION: %s at %.2f degree" % 
                                      (self.collectServer.imageName, self.collectServer.startAngle))
-                      time.sleep(0.2)
+                      time.sleep(0.1)
                       self.collectServer.PrepareCollect()
                       time.sleep(0.05)
-                      _settings = "Start_angle %.4f" % start
-                      logging.getLogger().info( "MxSettings: " + _settings )
-                      self.pilatusServer.SetMxSettings(_settings )
+                      self.pilatusServer.SetMxSettings("Start_angle %.4f" % start)
+                      self.pilatusServer.SetMxSettings("Angle_increment %.4f" % osc_range)
+                      
                       self.collectServer.Start()
                       abs_filename = os.path.join(self.dcpars['fileinfo']['directory'], 
                                                   self.collectServer.imageName)
