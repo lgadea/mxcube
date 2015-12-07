@@ -586,9 +586,17 @@ class PixelDetector:
         output = run_job('merge2cbf')
         print "".join(output)
 
-    def merge(filenames, output_template):
-        '''Merge the cbf images of N files with random names.'''
-    
+    def merge(filenamelog, output_template):
+        '''Merge the cbf images of 10  files .'''
+        if os.path.exists(filenamelog):
+            filenames = []
+            with open(filenamelog , 'r') as f:
+                for line in f :
+                    if 'ramdisk' in line :
+                        fileTemp = line.split(' ') 
+                        fileTemp = fileTemp[-1].replace('ramdisk','data1-1')
+                    filenanes.append(lineTemp)
+                    
         template = 'to_sum_%04d.cbf'
     
         for j, filename in enumerate(filenames):
