@@ -10,6 +10,7 @@ import math
 import httplib
 import subprocess
 import socket
+import re
 
 import PyTango
 from PyTango import DeviceProxy
@@ -275,16 +276,23 @@ class PixelDetector:
               # PL. 2015_09_14: Temporary hook to make characterization work.
               if self.dcpars['experiment_type'] == 'Characterization':
                   logging.getLogger("user_level_log").info("<PX1 MultiCollect> Characterization started")
-                  logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
+                  #logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
+                  tempToOscillation = self.dcpars['fileinfo']['template'][:3]+"_wdg"+\
+                              self.dcpars['fileinfo']['template'][3:]
+                  
                   for nstart in range(self.dcpars['oscillation_sequence'][0]['number_of_images']):
-                      NIMAGE = 10
+                      #tempFile =[]
+                      NIMAGE = 1
+                      #tempImagePull = self.dcpars['fileinfo']['template'] % (nstart + 1)
+                      #tempFile.append(tempImagePull)
                       osc_range = float(self.dcpars['oscillation_sequence'][0]['range'])/NIMAGE
                       exp_time = float(self.dcpars['oscillation_sequence'][0]['exposure_time'])/NIMAGE
                       self.collectServer.startAngle = start
                       self.collectServer.numberOfImages = int(NIMAGE)
                       self.collectServer.imageWidth = osc_range
                       self.collectServer.exposurePeriod = exp_time
-                      self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (start/self.collectServer.imageWidth + 1)
+                      self.collectServer.imageName =tempToOscillation % (start/self.collectServer.imageWidth + 1)
+                      #self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (start/self.collectServer.imageWidth + 1)
                       logging.info("<PX1 MultiCollect> CHARACTERIZATION: %s at %.2f degree" % 
                                      (self.collectServer.imageName, self.collectServer.startAngle))
                       time.sleep(0.1)
@@ -296,9 +304,14 @@ class PixelDetector:
                       self.collectServer.Start()
                       abs_filename = os.path.join(self.dcpars['fileinfo']['directory'], 
                                                   self.collectServer.imageName)
+                      #tempFile.append(abs_filename)
+                      abs_filename_log = abs_filename[:-4]+".log"
+                      logging.info("<PX1 MultiCollect>  'Characterization' abs_filename: %s" %  abs_filename)
                       self.wait_image_on_disk(abs_filename)
                       self.adxv_show_latest(filename=abs_filename)
                       self.wait_collectServer_ready()
+                      self.wait_image_compil_on_disk(abs_filename_log)
+                      #here insert merge2
                       start += 90.
                   self.new_acquisition = False
               else:
@@ -402,6 +415,18 @@ class PixelDetector:
                break
             time.sleep(0.1)
         logging.info("Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
+        
+    @task
+    def wait_image_compil_on_disk(self, filename, timeout=20.0):
+        start_wait = time.time()
+        logging.info(" #############  Waiting for image %s " % filename)
+        while not os.path.exists(filename):
+            #logging.info("Waiting for image %s to appear on disk. Not there yet." % filename)
+            if time.time() - start_wait > timeout:
+               logging.info("Giving up waiting for image. Timeout")
+               break
+            time.sleep(0.1)
+        logging.info("################  Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
@@ -464,6 +489,123 @@ class PixelDetector:
         except:
             self.adxv_socket = None
             logging.getLogger().info("WARNING: Can't connect to ADXV.")
+ 
+#==============================================================================
+#    Block Merge2cbf and fill new header
+#==============================================================================
+     
+    def fillHeader(filenameS,filenameD,start,increment):
+        param = [start,increment]
+        bufFile = None    
+        l = 0
+        #firstline = ''
+        templist = []
+        nfile2 = sum(1 for _ in open(filenameD))
+        
+        if nfile2  < 25 + 1 :            
+            with open(filenameS , 'r') as f:
+                firstline = f.readline()
+                for line in f :
+                    l +=1
+                    #if 'data_' in line :
+                    #    tempnameS = line
+                    if '###' in line :
+                        templist.append(line)
+                    if '# ' in line :
+                        templist.append(line)
+            i=0
+            for ilist,iparam in zip (templist[18:20],param) :
+                ilist = re.sub('\d','?',ilist)
+                ilist = ilist.replace('?.????','{:05.4f}')
+                ilist = ilist.format(iparam)
+                templist[18+i] = ilist
+                i += 1
+            
+            strlist = "".join(templist)
+            
+            with open(filenameD, "r") as in_file:
+                bufFile = in_file.readlines()
+            
+            with open(filenameD, "w") as out_file:
+                flag = 0
+                for line in bufFile:
+                    if ";" in line and flag == 0:
+                        line = line + strlist
+                        flag += 1
+                    out_file.write(line)
+        else :
+            pass
+        
+    def run_job(executable, arguments = [], stdin = [], working_directory = None):
+        '''Run a program with some command-line arguments and some input,
+        then return the standard output when it is finished.'''
+
+
+        if working_directory is None:
+            working_directory = os.getcwd()
+    
+        command_line = '%s' % executable
+        for arg in arguments:
+            command_line += ' "%s"' % arg
+    
+        popen = subprocess.Popen(command_line,
+                                 bufsize = 1,
+                                 stdin = subprocess.PIPE,
+                                 stdout = subprocess.PIPE,
+                                 stderr = subprocess.STDOUT,
+                                 cwd = working_directory,
+                                 universal_newlines = True,
+                                 shell = True,
+                                 env = os.environ)
+    
+        for record in stdin:
+            popen.stdin.write('%s\n' % record)
+    
+        popen.stdin.close()
+    
+        output = []
+    
+        while True:
+            record = popen.stdout.readline()
+            if not record:
+                break
+    
+            output.append(record)
+    
+        return output
+
+    def run_merge2cbf(linked_file_template, image_range, output_template):
+        inpf = open('MERGE2CBF.INP', 'w')
+        inpf.write(
+            'NAME_TEMPLATE_OF_DATA_FRAMES=%s\n' % linked_file_template +
+            'DATA_RANGE= %d %d\n' % image_range +
+            'NAME_TEMPLATE_OF_OUTPUT_FRAMES=%s\n' % output_template +
+            'NUMBER_OF_DATA_FRAMES_COVERED_BY_EACH_OUTPUT_FRAME=%d\n' %
+            image_range[1])
+        inpf.close()
+        output = run_job('merge2cbf')
+        print "".join(output)
+
+    def merge(filenames, output_template):
+        '''Merge the cbf images of N files with random names.'''
+    
+        template = 'to_sum_%04d.cbf'
+    
+        for j, filename in enumerate(filenames):
+            os.symlink(os.path.abspath(filename), os.path.join(
+                os.getcwd(), template % (j + 1)))
+    
+        run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
+                         output_template)
+    
+        for j in range(len(filenames)):
+            os.remove(os.path.join(os.getcwd(), template % (j + 1)))
+    
+        return
+        
+#==============================================================================
+# 
+#==============================================================================
 
 class PilatusDetector(PixelDetector):
     pass
