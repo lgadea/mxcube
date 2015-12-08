@@ -266,10 +266,10 @@ class PixelDetector:
       if self.shutterless:
           if self.new_acquisition:
               # only do this once per collect
-              logging.info("<PX1 MultiCollect> Start Experiment_type: %s" % self.dcpars['experiment_type'])
-              logging.info("<PX1 MultiCollect> Start: Take_snapshot: %s" % ('take_snapshots' in self.dcpars))
+              #logging.info("<PX1 MultiCollect> Start Experiment_type: %s" % self.dcpars['experiment_type'])
+              #logging.info("<PX1 MultiCollect> Start: Take_snapshot: %s" % ('take_snapshots' in self.dcpars))
               self.oscaxis = self.collectServer.collectAxis
-              logging.info("<PX1 MultiCollect> Start: oscaxis: %s" % self.oscaxis)
+              #logging.info("<PX1 MultiCollect> Start: oscaxis: %s" % self.oscaxis)
               exptime = self.shutterless_exptime
               #end = start + self.shutterless_range
               self.first_frame = True
@@ -282,8 +282,8 @@ class PixelDetector:
                   
                   for nstart in range(self.dcpars['oscillation_sequence'][0]['number_of_images']):
                       #tempFile =[]
-                      NIMAGE = 1
-                      #tempImagePull = self.dcpars['fileinfo']['template'] % (nstart + 1)
+                      NIMAGE = 10
+                      templateImage = self.dcpars['fileinfo']['template'] % (nstart + 1)
                       #tempFile.append(tempImagePull)
                       osc_range = float(self.dcpars['oscillation_sequence'][0]['range'])/NIMAGE
                       exp_time = float(self.dcpars['oscillation_sequence'][0]['exposure_time'])/NIMAGE
@@ -304,21 +304,17 @@ class PixelDetector:
                       self.collectServer.Start()
                       abs_filename = os.path.join(self.dcpars['fileinfo']['directory'], 
                                                   self.collectServer.imageName)
-                      #tempFile.append(abs_filename)
                       abs_filename_log = abs_filename[:-4]+".log"
-#==============================================================================
-#                       logging.info("<PX1 MultiCollect>  'Characterization' self.dcpars['fileinfo']['directory']: %s" %  self.dcpars['fileinfo']['directory'])
-#                       logging.info("<PX1 MultiCollect>  'Characterization' self.dcpars['fileinfo']['template']: %s" %  self.dcpars['fileinfo']['template'])
-#                       logging.info("<PX1 MultiCollect>  'Characterization' self.collectServer.imageName: %s" %  self.collectServer.imageName)
-#                       logging.info("<PX1 MultiCollect>  'Characterization' abs_filename: %s" %  abs_filename)
-#==============================================================================
-                      logging.info("<PX1 MultiCollect>  'Characterization' abs_filename_log: %s \n %s " %  (abs_filename_log, type (abs_filename_log)))
+                      abs_lastImage = os.path.join(self.dcpars['fileinfo']['directory'], 
+                                                  templateImage)
+                      #logging.info("<PX1 MultiCollect>  'Characterization' abs_filename_log: %s \n %s " %  (abs_filename_log, type (abs_filename_log)))
+                      #logging.info("<PX1 MultiCollect>  'Characterization' abs_filename_log: %s " % templateImage)
                       self.wait_image_on_disk(abs_filename)
-                      self.adxv_show_latest(filename=abs_filename)
+                      #self.adxv_show_latest(filename=abs_filename)
                       self.wait_collectServer_ready()
                       self.wait_image_compil_on_disk(abs_filename_log)
-                      self.merge(abs_filename_log)
-                      
+                      self.merge(abs_filename_log,templateImage)
+                      self.adxv_show_latest(filename=abs_lastImage)
                       #here insert merge2
                       start += 90.
                   self.new_acquisition = False
@@ -427,7 +423,6 @@ class PixelDetector:
     @task
     def wait_image_compil_on_disk(self, filename, timeout=20.0):
         start_wait = time.time()
-        logging.info(" #############  Waiting for image %s " % filename)
         while not os.path.exists(filename):
             #logging.info("Waiting for image %s to appear on disk. Not there yet." % filename)
             if time.time() - start_wait > timeout:
@@ -544,11 +539,11 @@ class PixelDetector:
         else :
             pass
         
-    def run_job(executable, arguments = [], stdin = [], working_directory = None):
+    def run_job(self, executable, arguments = [], stdin = [], working_directory = None):
         '''Run a program with some command-line arguments and some input,
         then return the standard output when it is finished.'''
-
-
+        
+        working_directory = self.dcpars['fileinfo']['directory']
         if working_directory is None:
             working_directory = os.getcwd()
     
@@ -582,8 +577,10 @@ class PixelDetector:
     
         return output
 
-    def run_merge2cbf(linked_file_template, image_range, output_template):
-        inpf = open('MERGE2CBF.INP', 'w')
+    def run_merge2cbf(self, linked_file_template, image_range, output_template):
+        
+        MERGE2CBF_file = os.path.join(self.dcpars['fileinfo']['directory'], 'MERGE2CBF.INP')
+        inpf = open(MERGE2CBF_file, 'w')
         inpf.write(
             'NAME_TEMPLATE_OF_DATA_FRAMES=%s\n' % linked_file_template +
             'DATA_RANGE= %d %d\n' % image_range +
@@ -591,41 +588,43 @@ class PixelDetector:
             'NUMBER_OF_DATA_FRAMES_COVERED_BY_EACH_OUTPUT_FRAME=%d\n' %
             image_range[1])
         inpf.close()
-        output = run_job('merge2cbf')
+        output = self.run_job('merge2cbf')
         print "".join(output)
+        #logging.info("################  run_merge2cbf Process end  >>>>>>>>>>>>>>>>>> %s" % "".join(output))
 
-    def merge(self,filenamelog):#, output_template = 'summed_????.cbf'):
+    def merge(self,filenamelog, templateImage, output_template = 'summed_????.cbf'):
         '''Merge the cbf images of 10  files .'''
-        logging.info("################  Merge Process file from X.log %s " % filenamelog)
+        MergeInDir = self.dcpars['fileinfo']['directory']
         if os.path.exists(filenamelog):
-            logging.info("################  Merge Process file exist ")
             filenames = []
+            fileoscillation_i = ""
             with open(filenamelog , 'r') as f:
                 for line in f :
                     if 'ramdisk' in line :
                         lineitem = line.split(' ') 
                         ramdiskpath = lineitem[-1].rstrip()
-                        fileoscillation_i = os.path.basename(ramdiskpath)
-                    filenanes.append(fileoscillation_i)
-            template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
-            #template = 'to_sum_%04d.cbf'#filename destination
-            #to be modified
-            MergeInDir = self.dcpars['fileinfo']['directory']
-            logging.info("################  Merge Process file from X.log %s " % filename)
+                        fileoscillation_i = os.path.join(MergeInDir,os.path.basename(ramdiskpath))
+                        filenames.append(fileoscillation_i)
+            #template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
+            template = 'to_sum_%04d.cbf'#filename destination
+            
             for j, filename in enumerate(filenames):
                 os.symlink(os.path.abspath(filename), os.path.join(
                     MergeInDir, template % (j + 1)))
+                    
+            self.run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
+                         output_template)
+    
+            for j in range(len(filenames)):
+                os.remove(os.path.join(MergeInDir, template % (j + 1)))
+              
+            os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), os.path.join(MergeInDir,templateImage))
+            
         else :
           logging.info("################  Merge Process file not exist ")  
 
-#==============================================================================
-#         run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
-#                          output_template)
-#     
-#         for j in range(len(filenames)):
-#             os.remove(os.path.join(os.getcwd(), template % (j + 1)))
-#     
-#==============================================================================
+        
+    
             
         
 #==============================================================================
