@@ -498,6 +498,7 @@ class PixelDetector:
 #==============================================================================
      
     def fillHeader(filenameS,filenameD,start,increment):
+        logging.info("################  fillHeader %s  in  %" % (filename, filenameD))
         param = [start,increment]
         bufFile = None    
         l = 0
@@ -507,11 +508,11 @@ class PixelDetector:
         
         if nfile2  < 25 + 1 :            
             with open(filenameS , 'r') as f:
-                firstline = f.readline()
+                f.readline()
                 for line in f :
                     l +=1
-                    #if 'data_' in line :
-                    #    tempnameS = line
+                    if 'data_' in line :
+                        tempnameS = line
                     if '###' in line :
                         templist.append(line)
                     if '# ' in line :
@@ -519,8 +520,8 @@ class PixelDetector:
             i=0
             for ilist,iparam in zip (templist[18:20],param) :
                 ilist = re.sub('\d','?',ilist)
-                ilist = ilist.replace('?.????','{:05.4f}')
-                ilist = ilist.format(iparam)
+                ilist = ilist.replace('?.????','%05.4f')
+                ilist = ilist % float(iparam)
                 templist[18+i] = ilist
                 i += 1
             
@@ -532,6 +533,10 @@ class PixelDetector:
             with open(filenameD, "w") as out_file:
                 flag = 0
                 for line in bufFile:
+                    if '###' in line :
+                       line = '###CBF: Files generated from 10 image to XDS analysis \n'               
+                    if 'data_' in line :
+                       line = 'data_'+os.path.basename(filenameD)+' \n'
                     if ";" in line and flag == 0:
                         line = line + strlist
                         flag += 1
