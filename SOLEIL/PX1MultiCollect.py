@@ -266,10 +266,7 @@ class PixelDetector:
       if self.shutterless:
           if self.new_acquisition:
               # only do this once per collect
-              #logging.info("<PX1 MultiCollect> Start Experiment_type: %s" % self.dcpars['experiment_type'])
-              #logging.info("<PX1 MultiCollect> Start: Take_snapshot: %s" % ('take_snapshots' in self.dcpars))
               self.oscaxis = self.collectServer.collectAxis
-              #logging.info("<PX1 MultiCollect> Start: oscaxis: %s" % self.oscaxis)
               exptime = self.shutterless_exptime
               #end = start + self.shutterless_range
               self.first_frame = True
@@ -307,13 +304,12 @@ class PixelDetector:
                       abs_filename_log = abs_filename[:-4]+".log"
                       abs_lastImage = os.path.join(self.dcpars['fileinfo']['directory'], 
                                                   templateImage)
-                      #logging.info("<PX1 MultiCollect>  'Characterization' abs_filename_log: %s \n %s " %  (abs_filename_log, type (abs_filename_log)))
-                      #logging.info("<PX1 MultiCollect>  'Characterization' abs_filename_log: %s " % templateImage)
                       self.wait_image_on_disk(abs_filename)
-                      #self.adxv_show_latest(filename=abs_filename)
                       self.wait_collectServer_ready()
                       self.wait_image_compil_on_disk(abs_filename_log)
-                      self.merge(abs_filename_log,templateImage)
+                      self.merge(abs_filename_log, templateImage, start, 
+                                 self.dcpars['oscillation_sequence'][0]['range'], 
+                                 self.dcpars['oscillation_sequence'][0]['exposure_time'])
                       self.adxv_show_latest(filename=abs_lastImage)
                       #here insert merge2
                       start += 90.
@@ -324,10 +320,6 @@ class PixelDetector:
                   self.new_acquisition = False
                   logging.getLogger("user_level_log").info("<PX1 MultiCollect> Collect server started waiting for first image")
           else:
-              # wait for image number to change
-              #self.wait_nextimage()
-              #time.sleep(0.5*exptime)
-              #logging.info("Frame      %7.3f to %7.3f degrees", start, end)
               self.wait_for_axis(end, self.oscaxis)
               self.adxv_show_latest(int(ADXV_LATT_TIME/exptime))
       else:
@@ -497,22 +489,20 @@ class PixelDetector:
 #    Block Merge2cbf and fill new header
 #==============================================================================
      
-    def fillHeader(filenameS,filenameD,start,increment):
-        logging.info("################  fillHeader %s  in  %" % (filename, filenameD))
+    def fillHeader(self,filenameS,filenameD,start,increment,expotime):
         param = [start,increment]
         bufFile = None    
         l = 0
         #firstline = ''
         templist = []
         nfile2 = sum(1 for _ in open(filenameD))
-        
-        if nfile2  < 25 + 1 :            
+        if nfile2  < 26 + 1 : 
             with open(filenameS , 'r') as f:
                 f.readline()
                 for line in f :
                     l +=1
-                    if 'data_' in line :
-                        tempnameS = line
+                    #if 'data_' in line :
+                    #   tempnameS = line
                     if '###' in line :
                         templist.append(line)
                     if '# ' in line :
@@ -524,9 +514,12 @@ class PixelDetector:
                 ilist = ilist % float(iparam)
                 templist[18+i] = ilist
                 i += 1
+            exposure = re.sub('\d','?',templist[4])
+            exposure = exposure.replace('?.???????','%08.7f')
+            exposure = exposure % float(expotime)
+            templist[4] = exposure        
             
             strlist = "".join(templist)
-            
             with open(filenameD, "r") as in_file:
                 bufFile = in_file.readlines()
             
@@ -594,12 +587,14 @@ class PixelDetector:
             image_range[1])
         inpf.close()
         output = self.run_job('merge2cbf')
-        print "".join(output)
-        #logging.info("################  run_merge2cbf Process end  >>>>>>>>>>>>>>>>>> %s" % "".join(output))
+        #print "".join(output)
+        logging.info("################  run_merge2cbf Process end  >>>>>>>>>>>>>>>>>> %s" % "".join(output))
 
-    def merge(self,filenamelog, templateImage, output_template = 'summed_????.cbf'):
+    def merge(self,filenamelog, templateImage, startAngle,nOscillation,expotime):
         '''Merge the cbf images of 10  files .'''
+        output_template = 'summed_????.cbf'
         MergeInDir = self.dcpars['fileinfo']['directory']
+        finalName = os.path.join(MergeInDir,templateImage)
         if os.path.exists(filenamelog):
             filenames = []
             fileoscillation_i = ""
@@ -622,15 +617,11 @@ class PixelDetector:
     
             for j in range(len(filenames)):
                 os.remove(os.path.join(MergeInDir, template % (j + 1)))
-              
-            os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), os.path.join(MergeInDir,templateImage))
             
+            os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), finalName)
+            self.fillHeader(filenames[0],finalName,startAngle,nOscillation,expotime)
         else :
           logging.info("################  Merge Process file not exist ")  
-
-        
-    
-            
         
 #==============================================================================
 # 
@@ -814,7 +805,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def data_collection_hook(self, data_collect_parameters):
         self.dcpars = copy.copy(data_collect_parameters)
-        logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
+        #logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
         # Do Pilatus Recalibration is needed
         self._detector.do_recalibration(self.dcpars["energy"])
         if 'experiment_type' in self.dcpars:
