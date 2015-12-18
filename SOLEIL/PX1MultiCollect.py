@@ -495,47 +495,45 @@ class PixelDetector:
         l = 0
         #firstline = ''
         templist = []
-        nfile2 = sum(1 for _ in open(filenameD))
-        if nfile2  < 26 + 1 : 
-            with open(filenameS , 'r') as f:
-                f.readline()
-                for line in f :
-                    l +=1
-                    #if 'data_' in line :
-                    #   tempnameS = line
-                    if '###' in line :
-                        templist.append(line)
-                    if '# ' in line :
-                        templist.append(line)
-            i=0
-            for ilist,iparam in zip (templist[18:20],param) :
-                ilist = re.sub('\d','?',ilist)
-                ilist = ilist.replace('?.????','%05.4f')
-                ilist = ilist % float(iparam)
-                templist[18+i] = ilist
-                i += 1
-            exposure = re.sub('\d','?',templist[4])
-            exposure = exposure.replace('?.???????','%08.7f')
-            exposure = exposure % float(expotime)
-            templist[4] = exposure        
-            
-            strlist = "".join(templist)
-            with open(filenameD, "r") as in_file:
-                bufFile = in_file.readlines()
-            
-            with open(filenameD, "w") as out_file:
-                flag = 0
-                for line in bufFile:
-                    if '###' in line :
-                       line = '###CBF: Files generated from 10 image to XDS analysis \n'               
-                    if 'data_' in line :
-                       line = 'data_'+os.path.basename(filenameD)+' \n'
-                    if ";" in line and flag == 0:
-                        line = line + strlist
-                        flag += 1
-                    out_file.write(line)
-        else :
-            pass
+        
+        with open(filenameS , 'r') as f:
+            f.readline()
+            for line in f :
+                l +=1
+                #if 'data_' in line :
+                #   tempnameS = line
+                if '###' in line :
+                    templist.append(line)
+                if '# ' in line :
+                    templist.append(line)
+        i=0
+        for ilist,iparam in zip (templist[18:20],param) :
+            ilist = re.sub('\d','?',ilist)
+            ncar = '?'*(ilist.count('?')-5)+'?.????'
+            ilist = ilist.replace(ncar,'%05.4f')
+            ilist = ilist % float(iparam)
+            templist[18+i] = ilist
+            i += 1
+        exposure = re.sub('\d','?',templist[4])
+        exposure = exposure.replace('?.???????','%08.7f')
+        exposure = exposure % float(expotime)
+        templist[4] = exposure        
+        
+        strlist = "".join(templist)
+        with open(filenameD, "r") as in_file:
+            bufFile = in_file.readlines()
+        
+        with open(filenameD, "w") as out_file:
+            flag = 0
+            for line in bufFile:
+                if '###' in line :
+                   line = '###CBF: Files generated from 10 image to XDS analysis \n'               
+                if 'data_' in line :
+                   line = 'data_'+os.path.basename(filenameD)+' \n'
+                if ";" in line and flag == 0:
+                    line = line + strlist
+                    flag += 1
+                out_file.write(line)
         
     def run_job(self, executable, arguments = [], stdin = [], working_directory = None):
         '''Run a program with some command-line arguments and some input,
