@@ -691,8 +691,13 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def set_energy(self, energy):
         energy = float(energy)
-        logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
-        return self._tunable_bl.set_energy(energy)
+        current_energy = self._tunable_bl.getCurrentEnergy()
+        if abs(energy-current_energy) < 0.0005:
+            logging.info("<PX1 MultiCollect> set_energy not needed.")
+            return current_energy
+        else:
+            logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
+            return self._tunable_bl.set_energy(energy)
 
     @task
     def set_resolution(self, new_resolution):
@@ -711,9 +716,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             if (time.time() - t0) > 110:
                 logging.getLogger("HWR").error("<PX1 MultiCollect>  Timeout on moving RESOLUTION")
                 break
-        logging.info("<PX1 MultiCollect> detector_state: %s" % \
-                            self.bl_control.detector_distance.stateValue)
-        return self.get_resolution()
+        logging.info("<PX1 MultiCollect> set_resolution DONE.")
+        return self.bl_control.resolution.getPosition()
         
     @task
     def move_detector(self, detector_distance):
