@@ -29,13 +29,13 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         self.ws_shipping = self.getProperty('ws_shipping')
         self.ws_tools = self.getProperty('ws_tools')
         
-        logging.debug("Initializing SOLEIL ISPyB Client")
-        logging.debug("   - using http_proxy = %s " % os.environ['http_proxy'])
+        logging.info("Initializing SOLEIL ISPyB Client")
+        logging.info("   - using http_proxy = %s " % os.environ['http_proxy'])
 
         try:
 
             if self.ws_root:
-                logging.debug("self.ws_root %s" % self.ws_root)
+                #logging.info("self.ws_root %s" % self.ws_root)
                 try: 
                     self._shipping = self._wsdl_shipping_client()
                     self._collection = self._wsdl_collection_client()
@@ -110,7 +110,8 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         url_opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 
         trans = HttpAuthenticated(username = self.ws_username, password = self.ws_password)
-        print '_wsdl_client %s' % service_name, trans
+        logging.info("   - using '_wsdl_client %s : %s ' " % (service_name, trans))
+        #print '_wsdl_client %s' % service_name, trans
         trans.urlopener = url_opener
         urlbase = service_name + "?wsdl"
         locbase = service_name
