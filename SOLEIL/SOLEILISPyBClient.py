@@ -116,7 +116,6 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         trans = HttpAuthenticated(username = self.ws_username, password = self.ws_password)
 
         logging.info("   - using '_wsdl_client %s : %s ' " % (service_name, trans))
-
         trans.urlopener = url_opener
         urlbase = service_name + "?wsdl"
         locbase = service_name
