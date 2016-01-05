@@ -33,7 +33,7 @@ _WS_COLLECTION_URL = ""
 
 _CONNECTION_ERROR_MSG = "Could not connect to ISPyB, please verify that " + \
                         "the server is running and that your " + \
-                        "configuration is correct"
+                        "configuration is correct or Connect in local mode !!!!!!"
 
 
 SampleReference = namedtuple('SampleReference', ['code',
