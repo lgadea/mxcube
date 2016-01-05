@@ -132,7 +132,8 @@ class SOLEILLdapLogin(Procedure):
         try:
             found=self.ldapConnection.search_s(self.dcparts, ldap.SCOPE_SUBTREE, "uid="+username)
         except ldap.LDAPError,err:
-            print "error in LDAP search",err
+            logging.getLogger("HWR").debug("LdapLogin search_user: error in LDAP search: %s" % err)
+            #print "error in LDAP search",err
             return self.cleanup(ex=err)
         else:
             return found
@@ -199,7 +200,7 @@ class SOLEILLdapLogin(Procedure):
         beamlinelist = session_info.split(";")
 
         if len(beamlinelist) <2:
-            print "Cannot parse session info in ldap", session_info
+            logging.getLogger("HWR").debug("Cannot parse session info in ldap : %s" % session_info)
             return retlist
 
         usertype = beamlinelist[0]
@@ -213,7 +214,8 @@ class SOLEILLdapLogin(Procedure):
                     sessinfo = SessionInfo(projuser, usertype, beamline, int(sessbeg), int(sessend))
                     retlist.append(sessinfo)
         except:
-            print "Cannot parse session info in ldap", session_info
+            logging.getLogger("HWR").debug("Cannot parse session info in ldap : %s " % session_info)
+            #print "Cannot parse session info in ldap", session_info
 
         return retlist
 
@@ -221,11 +223,12 @@ class SOLEILLdapLogin(Procedure):
         try:
             found=self.ldapConnection.search_s(self.dcparts, ldap.SCOPE_SUBTREE)
         except ldap.LDAPError,err:
-            print "error in LDAP search",err
+            #print "error in LDAP search",err
             return self.cleanup(ex=err)
         else:
             for item in found:
-                print item
+                logging.getLogger("HWR").debug("show_all > item in found : %s " % item)
+                #print item
 
 class SessionInfo:
     def __init__(self, username, usertype, beamline, sessbeg, sessend):
