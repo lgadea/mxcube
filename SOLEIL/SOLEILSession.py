@@ -23,6 +23,9 @@ class SOLEILSession(Session.Session):
         path = path.replace( self["file_info"].getProperty('base_directory'), ispyb_base )
         return path
 
+    def get_beamline_name(self):
+        return self.getProperty("beamline_name")
+
     def set_user_info(self, username, user_id, group_id, projuser=None ):
         logging.debug("SESSION - User %s logged in. gid=%s / uid=%s " % (username,group_id,user_id))
         self.username = username 
@@ -36,11 +39,10 @@ class SOLEILSession(Session.Session):
                   available
         :rtype: str
         """
-        pn = "local-user"
         if self.proposal_number:
-             pn = "%s" % self.proposal_number
-        #logging.debug("SESSION: pn = %s" % (pn))
-	return pn
+             return "%s" % (self.proposal_number)
+        else:
+             return "local-user"
 	     
     def get_base_data_directory(self):
         """
@@ -76,6 +78,10 @@ class SOLEILSession(Session.Session):
             #directory = os.path.join(self.base_directory, self.get_user_category(),
             #                         self.get_proposal(), self.endstation_name,
             #                         start_time)
+            logging.debug("SoleilSession self.base_directory %s" % self.base_directory)
+            logging.debug("SoleilSession start_time %s" % start_time)
+            logging.debug("SoleilSession self.proposal_number %s" % self.proposal_number)
+            logging.debug("SoleilSession self.get_proposal_number() %s" % self.get_proposal_number())
             directory = os.path.join(self.base_directory, start_time, self.get_proposal_number())
 
         return directory
