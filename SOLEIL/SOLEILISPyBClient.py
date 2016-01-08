@@ -4,6 +4,7 @@ import logging
 import urllib2
 import os
 from cookielib import CookieJar
+from qt import *
 
 from suds.transport.http import HttpAuthenticated
 from suds.client import Client
@@ -35,23 +36,25 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         try:
 
             if self.ws_root:
-                #logging.info("self.ws_root %s" % self.ws_root)
+                logging.info("self.ws_root %s" % self.ws_root)
                 try: 
                     self._shipping = self._wsdl_shipping_client()
                     self._collection = self._wsdl_collection_client()
                     self._tools_ws = self._wsdl_tools_client()
 
                 except: 
-                    import traceback
-                    print traceback.print_exc()
+                    #import traceback
+                    #print traceback.print_exc()
                 #except URLError:
-                    print "URLError"
-                    logging.getLogger("ispyb_client")\
-                        .exception(_CONNECTION_ERROR_MSG)
+                    #print "URLError"
+                    logging.getLogger("user_level_log")\
+                        .warning(_CONNECTION_ERROR_MSG)
+                    #logging.getLogger("ispyb_client")\
+                    #    .exception(_CONNECTION_ERROR_MSG)
                     return
         except:
-            import traceback
-            print traceback.print_exc()
+            #import traceback
+            #print traceback.print_exc()
             logging.getLogger("ispyb_client").exception(_CONNECTION_ERROR_MSG)
             return
  
@@ -83,7 +86,7 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
             #traceback.print_exc()
 
         self.beamline_name = self.get_beamline_name()
-
+ 
     def translate(self, code, what):  
         """
         Given a proposal code, returns the correct code to use in the GUI,
