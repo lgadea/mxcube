@@ -303,7 +303,6 @@ class PX1Cats(SampleChanger):
         if selected==self.getLoadedSample():
             logging.info("PX1Cats. trying to load an already loaded sample. nothing to do" )
             self._waitDeviceState( [SampleChangerState.Ready, SampleChangerState.StandBy],  )
-            logging.info("PX1Cats._executeServerTask. Done with waiting.")
             return True
 
         # calculate CATS specific lid/sample number
@@ -326,15 +325,15 @@ class PX1Cats(SampleChanger):
 	
 	# Check the value of the CATSCRYOTONG attribute dryAndSoakNeeded to warn user if it is True
 	dryAndSoak = self._chnDryAndSoakNeeded.getValue()
-        logging.info("PX1Cats. dryAndSoak %s" % dryAndSoak)
 	if dryAndSoak:
 	    logging.getLogger('user_level_log').warning("CATS: It is recommended to Dry_and_Soak the gripper.")
 
 	incoherentSample = self._chnIncoherentGonioSampleState.getValue()
-        logging.info("PX1Cats. dryAndSoak %s" % incoherentSample)
+        logging.info("PX1Cats. _chnIncoherentGonioSampleState is %s" % incoherentSample)
 	if incoherentSample:
-            #logging.getLogger("user_level_log").info("CATS: Load/Unload Error. Please try again.")
+            logging.getLogger("user_level_log").info("CATS: Load/Unload Error. Please try again.")
             self.emit('loadError', incoherentSample)
+          
             
     def _doUnload(self,sample_slot=None):
         """
@@ -395,7 +394,6 @@ class PX1Cats(SampleChanger):
         else:
            task_id = method(argin)
 
-        logging.info("PX1Cats._executeServerTask %s" %task_id)
         self.task_started = time.time()
         self.task_name = taskname
 
@@ -773,11 +771,13 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        if not self.environment.readyForTransfer():
-             self.environment.setPhase(EnvironmentPhase.TRANSFER)
+        #if not self.environment.readyForTransfer():
+        #     self.environment.setPhase(EnvironmentPhase.TRANSFER)
         
         if self.environment.readyForTransfer():
             self._executeServerTask(self._cmdSafe, "Safe", states=[SampleChangerState.Ready, SampleChangerState.Alarm])
+        else :
+            self.environment.setPhase(EnvironmentPhase.TRANSFER)
 
     def _doPowerState(self, state=False):
         """
