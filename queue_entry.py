@@ -1237,7 +1237,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     log.info("Centring sample, please wait.")
                     dm.startCentringMethod(dm.C3D_MODE)
     
-                view.setText(1, "Centring !")
+                view.setText(1, "Centring in progress")
                 async_result.get()
                 view.setText(1, "Centring done !")
                 log.info("Centring saved")
