@@ -367,6 +367,7 @@ class MiniDiff(Equipment):
 
 
     def cancelCentringMethod(self,reject=False):
+                    
         if self.currentCentringProcedure is not None:
             try:
                 self.currentCentringProcedure.kill()
@@ -531,6 +532,7 @@ class MiniDiff(Equipment):
 
     def emitCentringFailed(self):
         self.centringStatus={"valid":False}
+        self.centringStatus["accepted"]=False
         method=self.currentCentringMethod
         self.currentCentringMethod = None
         self.currentCentringProcedure=None

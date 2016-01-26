@@ -454,12 +454,11 @@ class SampleQueueEntry(BaseQueueEntry):
                 log.info(msg)
 
     def centring_done(self, success, centring_info):
-        if success:
-            self.sample_centring_result.set(centring_info)
-        else:
+        if not success:
             msg = "Loop centring failed or was cancelled, " +\
                   "please continue manually."
             logging.getLogger("user_level_log").warning(msg)
+        self.sample_centring_result.set(centring_info)
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
@@ -1207,24 +1206,20 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                                                                   
     if not beamline_setup_hwobj.sample_changer_hwobj.hasLoadedSample():
         #Disables all related collections
-        logging.info("#######    NO LOADING SAMPLE    ")
         view.setOn(False)
         view.setText(1, "Sample not loaded")
         raise QueueSkippEntryException("Sample not loaded", "")
     else:
-        logging.info("@@@@@@@@@@@@@@    SAMPLE LOADED    ")
         view.setText(1, "Sample loaded")
  
         dm = beamline_setup_hwobj.diffractometer_hwobj
     
         if dm is not None:
-            logging.info("#######    RUN centring process")
             try:
                 dm.connect("centringAccepted", centring_done_cb)
                 #dm.connect("centringFailed", centring_done_cb)
                 centring_method = view.listView().parent().\
                                   centring_method
-                logging.info("#######    RUN centring methode %s" % centring_method)
                 if centring_method == CENTRING_METHOD.MANUAL:
                     log.warning("Manual centring used, waiting for" +\
                                 " user to center sample")
@@ -1238,11 +1233,18 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     dm.startCentringMethod(dm.C3D_MODE)
     
                 view.setText(1, "Centring in progress")
-                async_result.get()
-                view.setText(1, "Centring done !")
-                log.info("Centring saved")
+                centring = async_result.get()
+                if centring ['valid'] :
+                    view.setText(1, "Centring done !")
+                    #log.info("Centring saved")
+                else :
+                    if centring["accepted"]:
+                        view.setText(1, "Centring Abort")
+                    else :
+                        view.setText(1, "Centring rejected")
             finally:
                 dm.disconnect("centringAccepted", centring_done_cb)
+               
 
 
 MODEL_QUEUE_ENTRY_MAPPINGS = \
