@@ -276,7 +276,7 @@ class PixelDetector:
                   #logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
                   tempToOscillation = self.dcpars['fileinfo']['template'][:3]+"_wdg"+\
                               self.dcpars['fileinfo']['template'][3:]
-                  
+                  logging.info("<PX1 MultiCollect> Characterization started temToOscil %s" % tempToOscillation)
                   for nstart in range(self.dcpars['oscillation_sequence'][0]['number_of_images']):
                       #tempFile =[]
                       NIMAGE = 10
@@ -605,17 +605,17 @@ class PixelDetector:
                         filenames.append(fileoscillation_i)
             #template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
             template = 'to_sum_%04d.cbf'#filename destination
-            
+            """
             for j, filename in enumerate(filenames):
                 os.symlink(os.path.abspath(filename), os.path.join(
                     MergeInDir, template % (j + 1)))
-                    
+            """     
             self.run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
                          output_template)
-    
+            """    
             for j in range(len(filenames)):
                 os.remove(os.path.join(MergeInDir, template % (j + 1)))
-            
+            """
             os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), finalName)
             self.fillHeader(filenames[0],finalName,startAngle,nOscillation,expotime)
         else :
@@ -1012,9 +1012,55 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         AbstractMultiCollect.stopCollect(self,owner=None)
         return self._detector.reset_detector()
 
-    def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
+    #def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
         # What is this for ?
-        return ("/tmp", "/tmp", "/tmp")
+    #    return ("/tmp", "/tmp", "/tmp")
+
+    def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
+        i = 1
+
+        while True:
+          xds_input_file_dirname = "xds_%s_run%s_%d" % (prefix, run_number, i)
+          xds_directory = os.path.join(process_directory, xds_input_file_dirname)
+
+          if not os.path.exists(xds_directory):
+            break
+
+          i+=1
+
+        mosflm_input_file_dirname = "mosflm_%s_run%s_%d" % (prefix, run_number, i)
+        mosflm_directory = os.path.join(process_directory, mosflm_input_file_dirname)
+
+        #hkl2000_dirname = "hkl2000_%s_run%s_%d" % (prefix, run_number, i)
+        #hkl2000_directory = os.path.join(process_directory, hkl2000_dirname)
+
+        self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
+        self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
+        #self.raw_hkl2000_dir = os.path.join(files_directory, "process", hkl2000_dirname)
+
+        for dir in (self.raw_data_input_file_dir, xds_directory):
+          self.create_directories(dir)
+          logging.info("Creating XDS processing input file directory: %s", dir)
+          os.chmod(dir, 0777)
+        for dir in (self.mosflm_raw_data_input_file_dir, mosflm_directory):
+          self.create_directories(dir)
+          logging.info("Creating MOSFLM processing input file directory: %s", dir)
+          os.chmod(dir, 0777)
+        #for dir in (self.raw_hkl2000_dir, hkl2000_directory):
+        #  self.create_directories(dir)
+        #  os.chmod(dir, 0777)
+ 
+        try: 
+          try: 
+              os.symlink(files_directory, os.path.join(process_directory, "links"))
+          except os.error, e:
+              if e.errno != errno.EEXIST:
+                  raise
+        except:
+            logging.exception("Could not create processing file directory")
+
+        return xds_directory, mosflm_directory, None
+
 
     @task
     def write_input_files(self, collection_id):
