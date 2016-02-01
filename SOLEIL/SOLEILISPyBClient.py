@@ -133,14 +133,15 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         # Attention! directory passed by reference. modified in place
 
         prop = 'EDNA_files_dir' 
-        path = mx_collect_dict[prop] 
+        path = mx_collect_dict[prop]
         ispyb_path = self.session_hwobj.path_to_ispyb( path )
         mx_collect_dict[prop] = ispyb_path
 
-        prop = 'process_directory' 
-        path = mx_collect_dict['fileinfo'][prop] 
-        ispyb_path = self.session_hwobj.path_to_ispyb( path )
-        mx_collect_dict['fileinfo'][prop] = ispyb_path
+        #prop = 'process_directory' 
+        #path = mx_collect_dict['fileinfo'][prop] 
+        #ispyb_path = self.session_hwobj.path_to_ispyb( path )
+        #logging.info("----*-*-*----: %s to %s" % (path, ispyb_path)) 
+        #mx_collect_dict['fileinfo'][prop] = ispyb_path
 
         for i in range(4):
             try: 
