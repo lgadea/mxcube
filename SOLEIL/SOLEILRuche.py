@@ -16,13 +16,19 @@ class SOLEILRuche(HardwareObject):
 
     def trigger_sync(self, path):
 
+        try:
+            logging.getLogger().info("<SOLEIL Ruche> - sync on non existant path %s. Ignored" % path)
+            logging.getLogger().info("<SOLEIL Ruche> username: %s  user_id: %s projuser: %s" % \
+                (self.session_ho.username, self.session_ho.user_id, self.session_ho.projuser))
+        except:
+            pass 
         if os.path.isdir(path):
-             path_to_sync = path
+            path_to_sync = path
         elif os.path.exists(path):
-             path_to_sync = os.path.dirname( os.path.abspath(path))
+            path_to_sync = os.path.dirname( os.path.abspath(path))
         else:
-             logging.getLogger().info("<SOLEIL Ruche> - sync on non existant path %s. Ignored" % path)
-             return
+            logging.getLogger().info("<SOLEIL Ruche> - sync on non existant path %s. Ignored" % path)
+            return
 
         logging.getLogger().info("<SOLEIL Ruche> - triggering data sync on directory %s" % path_to_sync)
         ruche_info = self.session_ho.get_ruche_info( path_to_sync )
