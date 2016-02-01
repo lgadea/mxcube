@@ -129,7 +129,7 @@ class PixelDetector:
                 logging.getLogger("user_level_log").error("Re-calibration of Pilatus detector not possible.")
                 return
             self.pilatusServer.SetEnergy(int(energy*1000))
-            time.sleep(0.2)
+            time.sleep(1)
             if self.pilatusServer.State() != "STANDBY":
                 logging.getLogger("user_level_log").info("Calibration of Pilatus detector in progress (takes about 1 minute).")
 
@@ -824,16 +824,23 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def set_resolution(self, new_resolution):
         logging.info("<PX1 MultiCollect> TEST - set_resolution")
+        if abs(new_resolution - self.get_resolution()) < 0.005:
+            logging.info("<PX1 MultiCollect> set_resolution: Already OK.")
+            return self.get_resolution()
         self.bl_control.resolution.move(new_resolution)
         time.sleep(0.5)
-        logging.info("<PX1 MultiCollect> detector_state: %s" % self.bl_control.detector_distance.stateValue)
+        logging.info("<PX1 MultiCollect> detector_state: %s" % \
+                           self.bl_control.detector_distance.stateValue)
         t0 = time.time()
-        while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
+        #while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
+        while abs(new_resolution - self.get_resolution()) > 0.005:
             time.sleep(0.1)
             if (time.time() - t0) > 110:
                 logging.getLogger("HWR").error("<PX1 MultiCollect>  Timeout on moving RESOLUTION")
                 break
-        return self.bl_control.resolution.getPosition()
+        logging.info("<PX1 MultiCollect> detector_state: %s" % \
+                            self.bl_control.detector_distance.stateValue)
+        return self.get_resolution()
         
     @task
     def move_detector(self, detector_distance):
