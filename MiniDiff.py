@@ -518,13 +518,11 @@ class MiniDiff(Equipment):
         self.emit('centringAccepted', (True,self.getCentringStatus()))
 
     def rejectCentring(self):
-        logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> rejectCentring in MINIDIFF    >>>>>")
         if self.currentCentringProcedure:
           self.currentCentringProcedure.kill()
         self.centringStatus={"valid":False}
         #self.centringStatus["valid"]=False
         #self.centringStatus["accepted"]=False
-        #self.emitProgressMessage("")
         self.emit('centringAccepted', (False,self.getCentringStatus()))
 
     def emitCentringMoving(self):
