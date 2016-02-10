@@ -345,7 +345,7 @@ def find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb,phipos):
       info, x, y = lucid.find_loop(snapshot_filename)
   except:
       import traceback
-      logging.info("lucid found an exception while executing:  %s" % traceback.format_exc())
+      logging.info("lucid2 found an exception while executing:  %s" % traceback.format_exc())
       info, x, y = ("",-1,-1)
       
   

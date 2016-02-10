@@ -454,12 +454,11 @@ class SampleQueueEntry(BaseQueueEntry):
                 log.info(msg)
 
     def centring_done(self, success, centring_info):
-        if success:
-            self.sample_centring_result.set(centring_info)
-        else:
+        if not success:
             msg = "Loop centring failed or was cancelled, " +\
                   "please continue manually."
             logging.getLogger("user_level_log").warning(msg)
+        self.sample_centring_result.set(centring_info)
 
     def pre_execute(self):
         BaseQueueEntry.pre_execute(self)
@@ -1190,43 +1189,62 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
     loc = data_model.location
     holder_length = data_model.holder_length
 
-    if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__')\
-       and (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
-        element = '%d:%02d' % tuple(map(int,loc))
-        #element = '%d:%02d' % loc
+    if hasattr(beamline_setup_hwobj.sample_changer_hwobj, '__TYPE__'):
+        if (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
+            element = '%d:%02d' % tuple(map(int,loc))
+            #element = '%d:%02d' % loc
         beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
     else:
-        beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
+        if beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
                                                               sample_location=loc,
-                                                              wait=True)
+                                                              wait=True)==False :
+            # WARNING: explicit test of False return value.
+            # This is to preserve backward compatibility (load_sample was supposed to return None);
+            # if sample could not be loaded, but no exception is raised, let's skip the sample
+            raise QueueSkippEntryException("Sample changer could not load sample", "")
 
-    dm = beamline_setup_hwobj.diffractometer_hwobj
-
-    if dm is not None:
-        try:
-            dm.connect("centringAccepted", centring_done_cb)
-            dm.connect("centringFailed", centring_done_cb)
-            centring_method = view.listView().parent().\
-                              centring_method
-                  
-            if centring_method == CENTRING_METHOD.MANUAL:
-                log.warning("Manual centring used, waiting for" +\
-                            " user to center sample")
-                dm.startCentringMethod(dm.MANUAL3CLICK_MODE)
-            elif centring_method == CENTRING_METHOD.LOOP:
-                dm.startCentringMethod(dm.C3D_MODE)
-                log.warning("Centring in progress. Please save" +\
-                            " the suggested centring or re-center")
-            elif centring_method == CENTRING_METHOD.FULLY_AUTOMATIC:
-                log.info("Centring sample, please wait.")
-                dm.startCentringMethod(dm.C3D_MODE)
-
-            view.setText(1, "Centring !")
-            async_result.get()
-            view.setText(1, "Centring done !")
-            log.info("Centring saved")
-        finally:
-            dm.disconnect("centringAccepted", centring_done_cb)
+                                                                  
+    if not beamline_setup_hwobj.sample_changer_hwobj.hasLoadedSample():
+        #Disables all related collections
+        view.setOn(False)
+        view.setText(1, "Sample not loaded")
+        raise QueueSkippEntryException("Sample not loaded", "")
+    else:
+        view.setText(1, "Sample loaded")
+ 
+        dm = beamline_setup_hwobj.diffractometer_hwobj
+    
+        if dm is not None:
+            try:
+                dm.connect("centringAccepted", centring_done_cb)
+                #dm.connect("centringFailed", centring_done_cb)
+                centring_method = view.listView().parent().\
+                                  centring_method
+                if centring_method == CENTRING_METHOD.MANUAL:
+                    log.warning("Manual centring used, waiting for" +\
+                                " user to center sample")
+                    dm.startCentringMethod(dm.MANUAL3CLICK_MODE)
+                elif centring_method == CENTRING_METHOD.LOOP:
+                    dm.startCentringMethod(dm.C3D_MODE)
+                    log.warning("Centring in progress. Please save" +\
+                                " the suggested centring or re-center")
+                elif centring_method == CENTRING_METHOD.FULLY_AUTOMATIC:
+                    log.info("Centring sample, please wait.")
+                    dm.startCentringMethod(dm.C3D_MODE)
+    
+                view.setText(1, "Centring in progress")
+                centring = async_result.get()
+                if centring ['valid'] :
+                    view.setText(1, "Centring done !")
+                    #log.info("Centring saved")
+                else :
+                    if centring["accepted"]:
+                        view.setText(1, "Centring Abort")
+                    else :
+                        view.setText(1, "Centring rejected")
+            finally:
+                dm.disconnect("centringAccepted", centring_done_cb)
+               
 
 
 MODEL_QUEUE_ENTRY_MAPPINGS = \

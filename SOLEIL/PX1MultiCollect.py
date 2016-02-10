@@ -10,6 +10,7 @@ import math
 import httplib
 import subprocess
 import socket
+import re
 
 import PyTango
 from PyTango import DeviceProxy
@@ -128,7 +129,7 @@ class PixelDetector:
                 logging.getLogger("user_level_log").error("Re-calibration of Pilatus detector not possible.")
                 return
             self.pilatusServer.SetEnergy(int(energy*1000))
-            time.sleep(0.2)
+            time.sleep(1)
             if self.pilatusServer.State() != "STANDBY":
                 logging.getLogger("user_level_log").info("Calibration of Pilatus detector in progress (takes about 1 minute).")
 
@@ -265,35 +266,52 @@ class PixelDetector:
       if self.shutterless:
           if self.new_acquisition:
               # only do this once per collect
-              logging.info("<PX1 MultiCollect> Start Experiment_type: %s" % self.dcpars['experiment_type'])
-              logging.info("<PX1 MultiCollect> Start: Take_snapshot: %s" % ('take_snapshots' in self.dcpars))
               self.oscaxis = self.collectServer.collectAxis
-              logging.info("<PX1 MultiCollect> Start: oscaxis: %s" % self.oscaxis)
               exptime = self.shutterless_exptime
               #end = start + self.shutterless_range
               self.first_frame = True
               # PL. 2015_09_14: Temporary hook to make characterization work.
               if self.dcpars['experiment_type'] == 'Characterization':
                   logging.getLogger("user_level_log").info("<PX1 MultiCollect> Characterization started")
-                  logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
+                  #logging.info("<PX1 MultiCollect> dcpars: %s" % self.dcpars)
+                  tempToOscillation = self.dcpars['fileinfo']['template'][:3]+"_wdg"+\
+                              self.dcpars['fileinfo']['template'][3:]
+                  logging.info("<PX1 MultiCollect> Characterization started temToOscil %s" % tempToOscillation)
                   for nstart in range(self.dcpars['oscillation_sequence'][0]['number_of_images']):
+                      #tempFile =[]
+                      NIMAGE = 10
+                      templateImage = self.dcpars['fileinfo']['template'] % (nstart + 1)
+                      #tempFile.append(tempImagePull)
+                      osc_range = float(self.dcpars['oscillation_sequence'][0]['range'])/NIMAGE
+                      exp_time = float(self.dcpars['oscillation_sequence'][0]['exposure_time'])/NIMAGE
                       self.collectServer.startAngle = start
-                      self.collectServer.numberOfImages = 1
-                      self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (nstart+1)
+                      self.collectServer.numberOfImages = int(NIMAGE)
+                      self.collectServer.imageWidth = osc_range
+                      self.collectServer.exposurePeriod = exp_time
+                      self.collectServer.imageName =tempToOscillation % (start/self.collectServer.imageWidth + 1)
+                      #self.collectServer.imageName = self.dcpars['fileinfo']['template'] % (start/self.collectServer.imageWidth + 1)
                       logging.info("<PX1 MultiCollect> CHARACTERIZATION: %s at %.2f degree" % 
                                      (self.collectServer.imageName, self.collectServer.startAngle))
-                      time.sleep(0.2)
+                      time.sleep(0.1)
                       self.collectServer.PrepareCollect()
                       time.sleep(0.05)
-                      _settings = "Start_angle %.4f" % start
-                      logging.getLogger().info( "MxSettings: " + _settings )
-                      self.pilatusServer.SetMxSettings(_settings )
+                      self.pilatusServer.SetMxSettings("Start_angle %.4f" % start)
+                      self.pilatusServer.SetMxSettings("Angle_increment %.4f" % osc_range)
+                      
                       self.collectServer.Start()
                       abs_filename = os.path.join(self.dcpars['fileinfo']['directory'], 
                                                   self.collectServer.imageName)
+                      abs_filename_log = abs_filename[:-4]+".log"
+                      abs_lastImage = os.path.join(self.dcpars['fileinfo']['directory'], 
+                                                  templateImage)
                       self.wait_image_on_disk(abs_filename)
-                      self.adxv_show_latest(filename=abs_filename)
                       self.wait_collectServer_ready()
+                      self.wait_image_compil_on_disk(abs_filename_log)
+                      self.merge(abs_filename_log, templateImage, start, 
+                                 self.dcpars['oscillation_sequence'][0]['range'], 
+                                 self.dcpars['oscillation_sequence'][0]['exposure_time'])
+                      self.adxv_show_latest(filename=abs_lastImage)
+                      #here insert merge2
                       start += 90.
                   self.new_acquisition = False
               else:
@@ -302,10 +320,6 @@ class PixelDetector:
                   self.new_acquisition = False
                   logging.getLogger("user_level_log").info("<PX1 MultiCollect> Collect server started waiting for first image")
           else:
-              # wait for image number to change
-              #self.wait_nextimage()
-              #time.sleep(0.5*exptime)
-              #logging.info("Frame      %7.3f to %7.3f degrees", start, end)
               self.wait_for_axis(end, self.oscaxis)
               self.adxv_show_latest(int(ADXV_LATT_TIME/exptime))
       else:
@@ -397,6 +411,17 @@ class PixelDetector:
                break
             time.sleep(0.1)
         logging.info("Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
+        
+    @task
+    def wait_image_compil_on_disk(self, filename, timeout=20.0):
+        start_wait = time.time()
+        while not os.path.exists(filename):
+            #logging.info("Waiting for image %s to appear on disk. Not there yet." % filename)
+            if time.time() - start_wait > timeout:
+               logging.info("Giving up waiting for image. Timeout")
+               break
+            time.sleep(0.1)
+        logging.info("################  Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
@@ -459,6 +484,146 @@ class PixelDetector:
         except:
             self.adxv_socket = None
             logging.getLogger().info("WARNING: Can't connect to ADXV.")
+ 
+#==============================================================================
+#    Block Merge2cbf and fill new header
+#==============================================================================
+     
+    def fillHeader(self,filenameS,filenameD,start,increment,expotime):
+        param = [start,increment]
+        bufFile = None    
+        l = 0
+        #firstline = ''
+        templist = []
+        
+        with open(filenameS , 'r') as f:
+            f.readline()
+            for line in f :
+                l +=1
+                #if 'data_' in line :
+                #   tempnameS = line
+                if '###' in line :
+                    templist.append(line)
+                if '# ' in line :
+                    templist.append(line)
+        i=0
+        for ilist,iparam in zip (templist[18:20],param) :
+            ilist = re.sub('\d','?',ilist)
+            ncar = '?'*(ilist.count('?')-5)+'?.????'
+            ilist = ilist.replace(ncar,'%05.4f')
+            ilist = ilist % float(iparam)
+            templist[18+i] = ilist
+            i += 1
+        exposure = re.sub('\d','?',templist[4])
+        exposure = exposure.replace('?.???????','%08.7f')
+        exposure = exposure % float(expotime)
+        templist[4] = exposure        
+        
+        strlist = "".join(templist)
+        with open(filenameD, "r") as in_file:
+            bufFile = in_file.readlines()
+        
+        with open(filenameD, "w") as out_file:
+            flag = 0
+            for line in bufFile:
+                if '###' in line :
+                   line = '###CBF: Files generated from 10 image to XDS analysis \n'               
+                if 'data_' in line :
+                   line = 'data_'+os.path.basename(filenameD)+' \n'
+                if ";" in line and flag == 0:
+                    line = line + strlist
+                    flag += 1
+                out_file.write(line)
+        
+    def run_job(self, executable, arguments = [], stdin = [], working_directory = None):
+        '''Run a program with some command-line arguments and some input,
+        then return the standard output when it is finished.'''
+        
+        working_directory = self.dcpars['fileinfo']['directory']
+        if working_directory is None:
+            working_directory = os.getcwd()
+    
+        command_line = '%s' % executable
+        for arg in arguments:
+            command_line += ' "%s"' % arg
+    
+        popen = subprocess.Popen(command_line,
+                                 bufsize = 1,
+                                 stdin = subprocess.PIPE,
+                                 stdout = subprocess.PIPE,
+                                 stderr = subprocess.STDOUT,
+                                 cwd = working_directory,
+                                 universal_newlines = True,
+                                 shell = True,
+                                 env = os.environ)
+    
+        for record in stdin:
+            popen.stdin.write('%s\n' % record)
+    
+        popen.stdin.close()
+    
+        output = []
+    
+        while True:
+            record = popen.stdout.readline()
+            if not record:
+                break
+    
+            output.append(record)
+    
+        return output
+
+    def run_merge2cbf(self, linked_file_template, image_range, output_template):
+        
+        MERGE2CBF_file = os.path.join(self.dcpars['fileinfo']['directory'], 'MERGE2CBF.INP')
+        inpf = open(MERGE2CBF_file, 'w')
+        inpf.write(
+            'NAME_TEMPLATE_OF_DATA_FRAMES=%s\n' % linked_file_template +
+            'DATA_RANGE= %d %d\n' % image_range +
+            'NAME_TEMPLATE_OF_OUTPUT_FRAMES=%s\n' % output_template +
+            'NUMBER_OF_DATA_FRAMES_COVERED_BY_EACH_OUTPUT_FRAME=%d\n' %
+            image_range[1])
+        inpf.close()
+        output = self.run_job('merge2cbf')
+        #print "".join(output)
+        logging.info("################  run_merge2cbf Process end  >>>>>>>>>>>>>>>>>> %s" % "".join(output))
+
+    def merge(self,filenamelog, templateImage, startAngle,nOscillation,expotime):
+        '''Merge the cbf images of 10  files .'''
+        output_template = 'summed_????.cbf'
+        MergeInDir = self.dcpars['fileinfo']['directory']
+        finalName = os.path.join(MergeInDir,templateImage)
+        if os.path.exists(filenamelog):
+            filenames = []
+            fileoscillation_i = ""
+            with open(filenamelog , 'r') as f:
+                for line in f :
+                    if 'ramdisk' in line :
+                        lineitem = line.split(' ') 
+                        ramdiskpath = lineitem[-1].rstrip()
+                        fileoscillation_i = os.path.join(MergeInDir,os.path.basename(ramdiskpath))
+                        filenames.append(fileoscillation_i)
+            #template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
+            template = 'to_sum_%04d.cbf'#filename destination
+            
+            for j, filename in enumerate(filenames):
+                os.symlink(os.path.abspath(filename), os.path.join(
+                    MergeInDir, template % (j + 1)))
+                 
+            self.run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
+                         output_template)
+                
+            for j in range(len(filenames)):
+                os.remove(os.path.join(MergeInDir, template % (j + 1)))
+            
+            os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), finalName)
+            self.fillHeader(filenames[0],finalName,startAngle,nOscillation,expotime)
+        else :
+          logging.info("################  Merge Process file not exist ")  
+        
+#==============================================================================
+# 
+#==============================================================================
 
 class PilatusDetector(PixelDetector):
     pass
@@ -638,7 +803,7 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def data_collection_hook(self, data_collect_parameters):
         self.dcpars = copy.copy(data_collect_parameters)
-        logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
+        #logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
         # Do Pilatus Recalibration is needed
         self._detector.do_recalibration(self.dcpars["energy"])
         if 'experiment_type' in self.dcpars:
@@ -664,17 +829,26 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     @task
     def set_resolution(self, new_resolution):
         logging.info("<PX1 MultiCollect> TEST - set_resolution")
+        if abs(new_resolution - self.get_resolution()) < 0.005:
+            logging.info("<PX1 MultiCollect> set_resolution: Already OK.")
+            return self.get_resolution()
         self.bl_control.resolution.move(new_resolution)
-        time.sleep(1.2)
-        logging.info("<PX1 MultiCollect> detector_state: %s" % self.bl_control.detector_distance.stateValue)
+
+        time.sleep(0.5)
+        logging.info("<PX1 MultiCollect> detector_state: %s" % \
+                           self.bl_control.detector_distance.stateValue)
+
         t0 = time.time()
-        while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
+        #while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
+        while abs(new_resolution - self.get_resolution()) > 0.005:
             time.sleep(0.1)
             if (time.time() - t0) > 110:
                 logging.getLogger("HWR").error("<PX1 MultiCollect>  Timeout on moving RESOLUTION")
                 break
-        logging.info("<PX1 MultiCollect> set_resolution DONE.")
-        return self.bl_control.resolution.getPosition()
+
+        logging.info("<PX1 MultiCollect> detector_state: %s" % \
+                            self.bl_control.detector_distance.stateValue)
+        return self.get_resolution()
         
     @task
     def move_detector(self, detector_distance):
@@ -846,9 +1020,55 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         AbstractMultiCollect.stopCollect(self,owner=None)
         return self._detector.reset_detector()
 
-    def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
+    #def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
         # What is this for ?
-        return ("/tmp", "/tmp", "/tmp")
+    #    return ("/tmp", "/tmp", "/tmp")
+
+    def prepare_input_files(self, files_directory, prefix, run_number, process_directory):
+        i = 1
+
+        while True:
+          xds_input_file_dirname = "xds_%s_run%s_%d" % (prefix, run_number, i)
+          xds_directory = os.path.join(process_directory, xds_input_file_dirname)
+
+          if not os.path.exists(xds_directory):
+            break
+
+          i+=1
+
+        mosflm_input_file_dirname = "mosflm_%s_run%s_%d" % (prefix, run_number, i)
+        mosflm_directory = os.path.join(process_directory, mosflm_input_file_dirname)
+
+        #hkl2000_dirname = "hkl2000_%s_run%s_%d" % (prefix, run_number, i)
+        #hkl2000_directory = os.path.join(process_directory, hkl2000_dirname)
+
+        self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
+        self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
+        #self.raw_hkl2000_dir = os.path.join(files_directory, "process", hkl2000_dirname)
+
+        for dir in (self.raw_data_input_file_dir, xds_directory):
+          self.create_directories(dir)
+          logging.info("Creating XDS processing input file directory: %s", dir)
+          os.chmod(dir, 0777)
+        for dir in (self.mosflm_raw_data_input_file_dir, mosflm_directory):
+          self.create_directories(dir)
+          logging.info("Creating MOSFLM processing input file directory: %s", dir)
+          os.chmod(dir, 0777)
+        #for dir in (self.raw_hkl2000_dir, hkl2000_directory):
+        #  self.create_directories(dir)
+        #  os.chmod(dir, 0777)
+ 
+        try: 
+          try: 
+              os.symlink(files_directory, os.path.join(process_directory, "links"))
+          except os.error, e:
+              if e.errno != errno.EEXIST:
+                  raise
+        except:
+            logging.exception("Could not create processing file directory")
+
+        return xds_directory, mosflm_directory, None
+
 
     @task
     def write_input_files(self, collection_id):

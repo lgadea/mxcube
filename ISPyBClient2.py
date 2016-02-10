@@ -33,7 +33,7 @@ _WS_COLLECTION_URL = ""
 
 _CONNECTION_ERROR_MSG = "Could not connect to ISPyB, please verify that " + \
                         "the server is running and that your " + \
-                        "configuration is correct"
+                        "configuration is correct or Connect in local mode !!!!!!"
 
 
 SampleReference = namedtuple('SampleReference', ['code',
@@ -1215,7 +1215,7 @@ class ISPyBClient2(HardwareObject):
             msg = 'Centred position stored in lims: %s' % pos_id
             logging.getLogger("ispyb_client").debug(msg)
         except Exception, ex:
-            msg = 'Could not store centred position in lims: %s' % ex.message
+            msg = 'Could not store centred position in lims: %s' % ex#.message
             logging.getLogger("ispyb_client").exception(msg)
 
         return pos_id

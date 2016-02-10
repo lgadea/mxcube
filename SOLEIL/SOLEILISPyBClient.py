@@ -4,6 +4,7 @@ import logging
 import urllib2
 import os
 from cookielib import CookieJar
+from qt import *
 
 from suds.transport.http import HttpAuthenticated
 from suds.client import Client
@@ -29,29 +30,32 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         self.ws_shipping = self.getProperty('ws_shipping')
         self.ws_tools = self.getProperty('ws_tools')
         
-        logging.debug("Initializing SOLEIL ISPyB Client")
-        logging.debug("   - using http_proxy = %s " % os.environ['http_proxy'])
+        logging.info("Initializing SOLEIL ISPyB Client")
+        logging.info("   - using http_proxy = %s " % os.environ['http_proxy'])
 
         try:
 
             if self.ws_root:
-                logging.debug("self.ws_root %s" % self.ws_root)
+                logging.info("self.ws_root %s" % self.ws_root)
+
                 try: 
                     self._shipping = self._wsdl_shipping_client()
                     self._collection = self._wsdl_collection_client()
                     self._tools_ws = self._wsdl_tools_client()
 
                 except: 
-                    import traceback
-                    print traceback.print_exc()
+                    #import traceback
+                    #print traceback.print_exc()
                 #except URLError:
-                    print "URLError"
-                    logging.getLogger("ispyb_client")\
-                        .exception(_CONNECTION_ERROR_MSG)
+                    #print "URLError"
+                    logging.getLogger("user_level_log")\
+                        .warning(_CONNECTION_ERROR_MSG)
+                    #logging.getLogger("ispyb_client")\
+                    #    .exception(_CONNECTION_ERROR_MSG)
                     return
         except:
-            import traceback
-            print traceback.print_exc()
+            #import traceback
+            #print traceback.print_exc()
             logging.getLogger("ispyb_client").exception(_CONNECTION_ERROR_MSG)
             return
  
@@ -83,7 +87,7 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
             #traceback.print_exc()
 
         self.beamline_name = self.get_beamline_name()
-
+ 
     def translate(self, code, what):  
         """
         Given a proposal code, returns the correct code to use in the GUI,
@@ -110,7 +114,9 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         url_opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 
         trans = HttpAuthenticated(username = self.ws_username, password = self.ws_password)
-        print '_wsdl_client %s' % service_name, trans
+
+        logging.info("   - using '_wsdl_client %s : %s ' " % (service_name, trans))
+
         trans.urlopener = url_opener
         urlbase = service_name + "?wsdl"
         locbase = service_name
@@ -129,14 +135,15 @@ class SOLEILISPyBClient(ISPyBClient2.ISPyBClient2):
         # Attention! directory passed by reference. modified in place
 
         prop = 'EDNA_files_dir' 
-        path = mx_collect_dict[prop] 
+        path = mx_collect_dict[prop]
         ispyb_path = self.session_hwobj.path_to_ispyb( path )
         mx_collect_dict[prop] = ispyb_path
 
-        prop = 'process_directory' 
-        path = mx_collect_dict['fileinfo'][prop] 
-        ispyb_path = self.session_hwobj.path_to_ispyb( path )
-        mx_collect_dict['fileinfo'][prop] = ispyb_path
+        #prop = 'process_directory' 
+        #path = mx_collect_dict['fileinfo'][prop] 
+        #ispyb_path = self.session_hwobj.path_to_ispyb( path )
+        #logging.info("----*-*-*----: %s to %s" % (path, ispyb_path)) 
+        #mx_collect_dict['fileinfo'][prop] = ispyb_path
 
         for i in range(4):
             try: 
