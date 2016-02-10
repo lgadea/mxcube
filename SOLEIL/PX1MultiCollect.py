@@ -605,17 +605,17 @@ class PixelDetector:
                         filenames.append(fileoscillation_i)
             #template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
             template = 'to_sum_%04d.cbf'#filename destination
-            """
+            
             for j, filename in enumerate(filenames):
                 os.symlink(os.path.abspath(filename), os.path.join(
                     MergeInDir, template % (j + 1)))
-            """     
+                 
             self.run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
                          output_template)
-            """    
+                
             for j in range(len(filenames)):
                 os.remove(os.path.join(MergeInDir, template % (j + 1)))
-            """
+            
             os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), finalName)
             self.fillHeader(filenames[0],finalName,startAngle,nOscillation,expotime)
         else :
