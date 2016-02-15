@@ -1042,15 +1042,16 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         #hkl2000_dirname = "hkl2000_%s_run%s_%d" % (prefix, run_number, i)
         #hkl2000_directory = os.path.join(process_directory, hkl2000_dirname)
 
-        self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
-        self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
+        #self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
+        #self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
         #self.raw_hkl2000_dir = os.path.join(files_directory, "process", hkl2000_dirname)
 
-        for dir in (self.raw_data_input_file_dir, xds_directory):
+        #for dir in (self.raw_data_input_file_dir, xds_directory):
+        for dir in (xds_directory,):
           self.create_directories(dir)
           logging.info("Creating XDS processing input file directory: %s", dir)
           os.chmod(dir, 0777)
-        for dir in (self.mosflm_raw_data_input_file_dir, mosflm_directory):
+        for dir in (mosflm_directory,):
           self.create_directories(dir)
           logging.info("Creating MOSFLM processing input file directory: %s", dir)
           os.chmod(dir, 0777)
