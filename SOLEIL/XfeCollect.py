@@ -5,7 +5,7 @@ from HardwareRepository import HardwareRepository
 from HardwareRepository import BaseHardwareObjects
 
 import time
-import pylab
+#import pylab
 import numpy
 import os
 import pickle
@@ -260,15 +260,15 @@ class XfeCollect(BaseHardwareObjects.Device):
         y = self.fluodet.get_data()
         self.saveData()
         
-        pylab.figure()
-        pylab.plot(x, y)
-        pylab.xlim(x[0], x[-1])
-        pylab.title('X-ray fluorescence emission spectrum')
-        pylab.xlabel('Energy [keV]')
-        pylab.ylabel('Intensity [Counts]')
-        pylab.savefig(self.filename)
+        #pylab.figure()
+        #pylab.plot(x, y)
+        #pylab.xlim(x[0], x[-1])
+        #pylab.title('X-ray fluorescence emission spectrum')
+        #pylab.xlabel('Energy [keV]')
+        #pylab.ylabel('Intensity [Counts]')
+        #pylab.savefig(self.filename)
         
-        pylab.show()
+        #pylab.show()
 
     def setHardwareControlMode(self, mode):
         self.hdw_control = mode
