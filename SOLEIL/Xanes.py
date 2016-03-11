@@ -8,7 +8,7 @@ from xabs_lib import McMaster
 import time
 import threading
 import logging
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy
 import commands
 import pickle
@@ -48,7 +48,7 @@ class Xanes(BaseHardwareObjects.Device):
                  channelToeV=10.,
                  test=False,
                  save=True,
-                 plot=True,
+                 plot=False,
                  expert=False):
 
         # initialize logging
