@@ -807,12 +807,8 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        try:
-	    self._executeServerTask(self._cmdHomeOpen, "HomeOpen")
-	except Exception, e:
-	    logging.warning("PX1Cats: _doHomeOpen %s" % e)
-	    logging.getLogger('user_level_log').warning("CATS: Sample already mounted, use UNLOAD before HOME/OPEN.")
-
+        self._executeServerTask(self._cmdHomeOpen, "HomeOpen")
+	
     def _doSoak(self):
         """
         Execute Soak command on CATS
