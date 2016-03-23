@@ -314,14 +314,17 @@ class PX1Cats(SampleChanger):
 
         if not self.environment.readyForTransfer():
              self.environment.setPhase(EnvironmentPhase.TRANSFER)
-        
+        time.sleep(2.0)
+         
         if self.hasLoadedSample():
             if selected==self.getLoadedSample():
                 raise Exception("The sample " + str(self.getLoadedSample().getAddress()) + " is already loaded")
             else:
-                self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
+                #self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
+                self._executeServerTask_0(self._cmdChainedLoad, argin=argin)
         else:
-                self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
+                #self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
+                self._executeServerTask_0(self._cmdLoad, argin=argin)
 	
 	# Check the value of the CATSCRYOTONG attribute dryAndSoakNeeded to warn user if it is True
 	dryAndSoak = self._chnDryAndSoakNeeded.getValue()
@@ -371,6 +374,32 @@ class PX1Cats(SampleChanger):
 
     def _softwareAuthorization(self, value):
         self.emit("softwareAuthorizationChanged", (value,))
+    
+    def _executeServerTask_0(self, method, *args):
+        """
+        Executes a task on the CATS Tango device server
+
+        :returns: None
+        :rtype: None
+        """
+        self._waitDeviceReady(3.0)
+        task_id = method(*args)
+        logging.info(" XXXXXXXXXXX Cats90._executeServerTask", task_id)
+        time.sleep(2.0)
+        ret=None
+        if task_id is None: #Reset
+            while self._isDeviceBusy():
+                gevent.sleep(0.1)
+        else:
+            # introduced wait because it takes some time before the attribute PathRunning is set
+            # after launching a transfer
+            #time.sleep(2.0)
+            while str(self._chnPathRunning.getValue()).lower() == 'true':
+                logging.info(" XXXXXXXXXXX Cats90._executeServerTask self._chnPathRunning is %s." % str(self._chnPathRunning.getValue()))
+                gevent.sleep(0.1)
+            ret = True
+        return ret
+
 
     def _executeServerTask(self, method, taskname, states=None, argin=None, *args):
         """
