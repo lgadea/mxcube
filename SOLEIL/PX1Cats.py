@@ -289,6 +289,7 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
+        #logging.info("XXXXXXXXXXXXXXXXXXXXXXXXXxxxxxxxxxxxxxxxxxxx PX1Cats _doLoad" )
         selected=self.getSelectedSample()            
         if sample is not None:
             if sample != selected:
@@ -314,17 +315,14 @@ class PX1Cats(SampleChanger):
 
         if not self.environment.readyForTransfer():
              self.environment.setPhase(EnvironmentPhase.TRANSFER)
-        time.sleep(2.0)
-         
         if self.hasLoadedSample():
             if selected==self.getLoadedSample():
                 raise Exception("The sample " + str(self.getLoadedSample().getAddress()) + " is already loaded")
             else:
-                #self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
-                self._executeServerTask_0(self._cmdChainedLoad, argin=argin)
+                self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
         else:
-                #self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
-                self._executeServerTask_0(self._cmdLoad, argin=argin)
+                self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
+                
 	
 	# Check the value of the CATSCRYOTONG attribute dryAndSoakNeeded to warn user if it is True
 	dryAndSoak = self._chnDryAndSoakNeeded.getValue()
@@ -374,33 +372,7 @@ class PX1Cats(SampleChanger):
 
     def _softwareAuthorization(self, value):
         self.emit("softwareAuthorizationChanged", (value,))
-    
-    def _executeServerTask_0(self, method, *args):
-        """
-        Executes a task on the CATS Tango device server
-
-        :returns: None
-        :rtype: None
-        """
-        self._waitDeviceReady(3.0)
-        task_id = method(*args)
-        logging.info(" XXXXXXXXXXX Cats90._executeServerTask", task_id)
-        time.sleep(2.0)
-        ret=None
-        if task_id is None: #Reset
-            while self._isDeviceBusy():
-                gevent.sleep(0.1)
-        else:
-            # introduced wait because it takes some time before the attribute PathRunning is set
-            # after launching a transfer
-            #time.sleep(2.0)
-            while str(self._chnPathRunning.getValue()).lower() == 'true':
-                logging.info(" XXXXXXXXXXX Cats90._executeServerTask self._chnPathRunning is %s." % str(self._chnPathRunning.getValue()))
-                gevent.sleep(0.1)
-            ret = True
-        return ret
-
-
+        
     def _executeServerTask(self, method, taskname, states=None, argin=None, *args):
         """
         Executes a task on the CATS Tango device server
@@ -411,11 +383,11 @@ class PX1Cats(SampleChanger):
         if self.infomode:
             logging.warning("PX1Cats. It is in info mode only. Command %s ignored" % taskname)
             return 
+        self._waitDeviceReady(3.0)
+        #if states == None:
+        #    states = [SampleChangerState.Ready, SampleChangerState.StandBy]
 
-        if states == None:
-            states = [SampleChangerState.Ready, SampleChangerState.StandBy]
-
-        self._waitDeviceState( states, 3.0 )
+        #self._waitDeviceState( states, 3.0 )
 
         if argin == None:
            task_id = method()
@@ -429,40 +401,25 @@ class PX1Cats(SampleChanger):
         if task_id is None: #Reset
             while self._isDeviceBusy():
                 gevent.sleep(0.1)
-            logging.info("PX1Cats._executeServerTask. RESET  task.")
-            state = self._readState()
-            logging.info("PX1Cats._executeServerTask. state at end of task is %s" % str(state))
+            #state = self._readState()
         else:
-            self._waitDeviceState( [SampleChangerState.Ready, SampleChangerState.StandBy],  )
+            self._pathRunning(10.0)
+            
+            while str(self._chnPathRunning.getValue()).lower() == 'true':
+                gevent.sleep(0.1) 
             ret = True
         return ret
-
-    def _executeServerTask2(self, method, taskname, states=None, argin=None, *args):
+        
+    def _pathRunning(self,timeout=None):
         """
-        Executes a task on the CATS Tango device server
+        Waits until the path running is true
 
         :returns: None
         :rtype: None
         """
-        self._waitDeviceState( SampleChangerState.Ready, 3.0 )
-        task_id = method(*args)
-
-        print "PX1Cats._executeServerTask", task_id
-        self.task_started = time.time()
-        self.task_name = taskname
-
-        ret=None
-        if task_id is None: #Reset
-            while self._isDeviceBusy():
-                gevent.sleep(0.1)
-        else:
-            # introduced wait because it takes some time before the attribute PathRunning is set
-            # after launching a transfer
-            time.sleep(2.0)
-            while str(self._chnPathRunning.getValue()).lower() == 'true': 
-                gevent.sleep(0.1)            
-            ret = True
-        return ret
+        with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
+            while not self._chnPathRunning.getValue():
+                gevent.sleep(0.01)
 
     def _updateState(self):
         """
@@ -496,7 +453,7 @@ class PX1Cats(SampleChanger):
         """
 
         state = self._chnState.getValue()
-
+       
         if state is not None:
             stateStr = str(state).upper()
         else:
