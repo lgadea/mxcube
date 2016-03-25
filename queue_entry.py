@@ -1193,7 +1193,8 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
         if (beamline_setup_hwobj.sample_changer_hwobj.__TYPE__ == 'CATS'):
             element = '%d:%02d' % tuple(map(int,loc))
             #element = '%d:%02d' % loc
-        beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
+            beamline_setup_hwobj.sample_changer_hwobj.load(sample=element, wait=True)
+         
     else:
         if beamline_setup_hwobj.sample_changer_hwobj.load_sample(holder_length,
                                                               sample_location=loc,
@@ -1202,8 +1203,7 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
             # This is to preserve backward compatibility (load_sample was supposed to return None);
             # if sample could not be loaded, but no exception is raised, let's skip the sample
             raise QueueSkippEntryException("Sample changer could not load sample", "")
-
-    logging.info("<<<<<    QueueEntry load is finish. >>>>>>")                                                          
+                                                             
     if not beamline_setup_hwobj.sample_changer_hwobj.hasLoadedSample():
         #Disables all related collections
         view.setOn(False)
@@ -1238,7 +1238,6 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     view.setText(1, "Centring done !")
                     log.info("Centring saved")
                 else :
-                    view.setText(1, "")
                     log.info("Centring aborted")
                     """
                     if centring["accepted"]:
@@ -1248,7 +1247,6 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     """
             finally:
                 dm.disconnect("centringAccepted", centring_done_cb)
-                dm.disconnect("centringFailed", centring_done_cb)
                
 
 
