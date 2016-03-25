@@ -1243,7 +1243,6 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     view.setText(1, "Centring done !")
                     log.info("Centring saved")
                 else :
-                    view.setText(1, "")
                     log.info("Centring aborted")
                     """
                     if centring["accepted"]:
@@ -1253,7 +1252,6 @@ def mount_sample(beamline_setup_hwobj, view, data_model,
                     """
             finally:
                 dm.disconnect("centringAccepted", centring_done_cb)
-                dm.disconnect("centringFailed", centring_done_cb)
                
 
 
