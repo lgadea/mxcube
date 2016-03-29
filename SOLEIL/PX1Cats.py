@@ -116,7 +116,7 @@ class PX1Cats(SampleChanger):
                              "_chnLidState", "_chnPathRunning", \
                              "_chnPowered", "_chnSafeNeeded", \
                              "_chnLN2Regulation", \
-                             "_chnSoftAuth",  \
+                             "_chnSoftAuth","_chnhomeOpened", \
                              "_chnPathRunning", "_chnMessage", \
                              "_chnNumLoadedSample", "_chnLidLoadedSample", \
                              "_chnSampleBarcode", "_chnSampleIsDetected",
@@ -133,7 +133,7 @@ class PX1Cats(SampleChanger):
         self._chnPathRunning.connectSignal("update", self._updateRunningState)
         self._chnMessage.connectSignal("update", self._updateMessage)
         self._chnIncoherentGonioSampleState.connectSignal("update", self._updateAckSampleMemory)
-
+        self._chnDryAndSoakNeeded.connectSignal("update",self._dryAndSoakNeeded)
         for basket_index in range(PX1Cats.NO_OF_BASKETS):            
             channel_name = "_chnBasket%dState" % (basket_index + 1)
             setattr(self, channel_name, self.getChannelObject(channel_name))
@@ -289,6 +289,7 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
+        #logging.info("XXXXXXXXXXXXXXXXXXXXXXXXXxxxxxxxxxxxxxxxxxxx PX1Cats _doLoad" )
         selected=self.getSelectedSample()            
         if sample is not None:
             if sample != selected:
@@ -314,7 +315,6 @@ class PX1Cats(SampleChanger):
 
         if not self.environment.readyForTransfer():
              self.environment.setPhase(EnvironmentPhase.TRANSFER)
-        
         if self.hasLoadedSample():
             if selected==self.getLoadedSample():
                 raise Exception("The sample " + str(self.getLoadedSample().getAddress()) + " is already loaded")
@@ -322,6 +322,7 @@ class PX1Cats(SampleChanger):
                 self._executeServerTask(self._cmdChainedLoad, "Exchange", states=[SampleChangerState.Ready,], argin=argin)
         else:
                 self._executeServerTask(self._cmdLoad, "Load", states=[SampleChangerState.Ready,], argin=argin)
+                
 	
 	# Check the value of the CATSCRYOTONG attribute dryAndSoakNeeded to warn user if it is True
 	dryAndSoak = self._chnDryAndSoakNeeded.getValue()
@@ -329,7 +330,6 @@ class PX1Cats(SampleChanger):
 	    logging.getLogger('user_level_log').warning("CATS: It is recommended to Dry_and_Soak the gripper.")
 
 	incoherentSample = self._chnIncoherentGonioSampleState.getValue()
-        logging.info("PX1Cats. _chnIncoherentGonioSampleState is %s" % incoherentSample)
 	if incoherentSample:
             logging.getLogger("user_level_log").info("CATS: Load/Unload Error. Please try again.")
             self.emit('loadError', incoherentSample)
@@ -372,7 +372,7 @@ class PX1Cats(SampleChanger):
 
     def _softwareAuthorization(self, value):
         self.emit("softwareAuthorizationChanged", (value,))
-
+        
     def _executeServerTask(self, method, taskname, states=None, argin=None, *args):
         """
         Executes a task on the CATS Tango device server
@@ -383,11 +383,11 @@ class PX1Cats(SampleChanger):
         if self.infomode:
             logging.warning("PX1Cats. It is in info mode only. Command %s ignored" % taskname)
             return 
+        self._waitDeviceReady(3.0)
+        #if states == None:
+        #    states = [SampleChangerState.Ready, SampleChangerState.StandBy]
 
-        if states == None:
-            states = [SampleChangerState.Ready, SampleChangerState.StandBy]
-
-        self._waitDeviceState( states, 3.0 )
+        #self._waitDeviceState( states, 3.0 )
 
         if argin == None:
            task_id = method()
@@ -401,41 +401,25 @@ class PX1Cats(SampleChanger):
         if task_id is None: #Reset
             while self._isDeviceBusy():
                 gevent.sleep(0.1)
-            logging.info("PX1Cats._executeServerTask. Done with waiting on no task.")
-            state = self._readState()
-            logging.info("PX1Cats._executeServerTask. state at end of task is %s" % str(state))
+            #state = self._readState()
         else:
-            self._waitDeviceState( [SampleChangerState.Ready, SampleChangerState.StandBy],  )
-            logging.info("PX1Cats._executeServerTask. Done with waiting.")
+            self._pathRunning(10.0)
+            
+            while str(self._chnPathRunning.getValue()).lower() == 'true':
+                gevent.sleep(0.1) 
             ret = True
         return ret
-
-    def _executeServerTask2(self, method, taskname, states=None, argin=None, *args):
+        
+    def _pathRunning(self,timeout=None):
         """
-        Executes a task on the CATS Tango device server
+        Waits until the path running is true
 
         :returns: None
         :rtype: None
         """
-        self._waitDeviceState( SampleChangerState.Ready, 3.0 )
-        task_id = method(*args)
-
-        print "PX1Cats._executeServerTask", task_id
-        self.task_started = time.time()
-        self.task_name = taskname
-
-        ret=None
-        if task_id is None: #Reset
-            while self._isDeviceBusy():
-                gevent.sleep(0.1)
-        else:
-            # introduced wait because it takes some time before the attribute PathRunning is set
-            # after launching a transfer
-            time.sleep(2.0)
-            while str(self._chnPathRunning.getValue()).lower() == 'true': 
-                gevent.sleep(0.1)            
-            ret = True
-        return ret
+        with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
+            while not self._chnPathRunning.getValue():
+                gevent.sleep(0.01)
 
     def _updateState(self):
         """
@@ -469,7 +453,7 @@ class PX1Cats(SampleChanger):
         """
 
         state = self._chnState.getValue()
-
+       
         if state is not None:
             stateStr = str(state).upper()
         else:
@@ -546,7 +530,6 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-
         with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
             while not self._isDeviceReady():
                 gevent.sleep(0.01)
@@ -915,6 +898,13 @@ class PX1Cats(SampleChanger):
 
         if value != self._lidState:
             self.emit('lidStateChanged', (not value, ))
+
+    def _dryAndSoakNeeded(self, value=None):
+        if value :
+            homeOpened = self._chnhomeOpened.getValue()
+            if not self._waitDeviceReady() and not homeOpened:
+                self._cmdDrySoak()  
+        
 
     def _updateAckSampleMemory(self, value=None):
         logging.info("PX1Cats1. UpdateAckSampleMemory: %s" % value)
