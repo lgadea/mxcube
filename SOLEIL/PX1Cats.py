@@ -383,10 +383,6 @@ class PX1Cats(SampleChanger):
         if self.infomode:
             logging.warning("PX1Cats. It is in info mode only. Command %s ignored" % taskname)
             return 
-        #self._waitDeviceReady(3.0)
-        #if states == None:
-        #    states = [SampleChangerState.Ready, SampleChangerState.StandBy]
-
         self._waitDeviceState( states, 3.0 )
 
         if argin == None:
