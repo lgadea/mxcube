@@ -691,13 +691,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def set_energy(self, energy):
         energy = float(energy)
-        current_energy = self._tunable_bl.getCurrentEnergy()
-        if abs(energy-current_energy) < 0.0005:
-            logging.info("<PX1 MultiCollect> set_energy not needed.")
-            return current_energy
-        else:
-            logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
-            return self._tunable_bl.set_energy(energy)
+        logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
+        return self._tunable_bl.set_energy(energy)
 
     @task
     def set_resolution(self, new_resolution):
