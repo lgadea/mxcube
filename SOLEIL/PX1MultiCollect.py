@@ -97,6 +97,12 @@ class PixelDetector:
             self.shutterless_exptime = (exptime + 0.003)*number_of_images
             self.shutterless_osc = osc_range
         # PL 2015_01_23 For ADXV visualisation.
+#==============================================================================
+#         #check if pilatus fault restart pilatus by collectServer.
+#         #_env_state = str(self.pilatusServer.State())
+#         if str(self.pilatusServer.State()) == "FAULT" :
+#             self.collectServer.PrepareCollect()
+#==============================================================================
         self.connectVisualisation()
         self.wait_recalibration()
         self.prepare_detector_header(take_dark, start, osc_range, exptime, npass, number_of_images, comment)
@@ -776,8 +782,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             wedge_sizes_list.append(remaining_frames)
         #print "final wedges list", wedge_sizes_list
         wedges_to_collect = []
-        logging.info("<PX1 MultiCollect> prepare_wedges_to_collect - wedge_sizes_list = %s" % wedge_sizes_list)
-        logging.info("<PX1 MultiCollect> prepare_wedges_to_collect - remaining_frames = %s" % remaining_frames)
+        #logging.info("<PX1 MultiCollect> prepare_wedges_to_collect - wedge_sizes_list = %s" % wedge_sizes_list)
+        #logging.info("<PX1 MultiCollect> prepare_wedges_to_collect - remaining_frames = %s" % remaining_frames)
         for wedge_size in wedge_sizes_list:
             orig_start = start
             
@@ -804,6 +810,9 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
     def data_collection_hook(self, data_collect_parameters):
         self.dcpars = copy.copy(data_collect_parameters)
         #logging.info("<PX1 MultiCollect> DCPARS: %s" % self.dcpars)
+        #check if pilatus fault restart pilatus by collectServer.
+        if str(self.pilatusServer.State()) == "FAULT" :
+             self.collectServer.PrepareCollect()
         # Do Pilatus Recalibration is needed
         self._detector.do_recalibration(self.dcpars["energy"])
         if 'experiment_type' in self.dcpars:
@@ -818,13 +827,8 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def set_energy(self, energy):
         energy = float(energy)
-        current_energy = self._tunable_bl.getCurrentEnergy()
-        if abs(energy-current_energy) < 0.0005:
-            logging.info("<PX1 MultiCollect> set_energy not needed.")
-            return current_energy
-        else:
-            logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
-            return self._tunable_bl.set_energy(energy)
+        logging.info("<PX1 MultiCollect> set_energy %.3f" % energy)
+        return self._tunable_bl.set_energy(energy)
 
     @task
     def set_resolution(self, new_resolution):
@@ -833,11 +837,9 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             logging.info("<PX1 MultiCollect> set_resolution: Already OK.")
             return self.get_resolution()
         self.bl_control.resolution.move(new_resolution)
-
         time.sleep(0.5)
         logging.info("<PX1 MultiCollect> detector_state: %s" % \
                            self.bl_control.detector_distance.stateValue)
-
         t0 = time.time()
         #while self.bl_control.detector_distance.stateValue in ["MOVING", "RUNNING"]:
         while abs(new_resolution - self.get_resolution()) > 0.005:
@@ -845,7 +847,6 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
             if (time.time() - t0) > 110:
                 logging.getLogger("HWR").error("<PX1 MultiCollect>  Timeout on moving RESOLUTION")
                 break
-
         logging.info("<PX1 MultiCollect> detector_state: %s" % \
                             self.bl_control.detector_distance.stateValue)
         return self.get_resolution()
@@ -1042,16 +1043,15 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
         #hkl2000_dirname = "hkl2000_%s_run%s_%d" % (prefix, run_number, i)
         #hkl2000_directory = os.path.join(process_directory, hkl2000_dirname)
 
-        #self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
-        #self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
+        self.raw_data_input_file_dir = os.path.join(files_directory, "process", xds_input_file_dirname)
+        self.mosflm_raw_data_input_file_dir = os.path.join(files_directory, "process", mosflm_input_file_dirname)
         #self.raw_hkl2000_dir = os.path.join(files_directory, "process", hkl2000_dirname)
 
-        #for dir in (self.raw_data_input_file_dir, xds_directory):
-        for dir in (xds_directory,):
+        for dir in (self.raw_data_input_file_dir, xds_directory):
           self.create_directories(dir)
           logging.info("Creating XDS processing input file directory: %s", dir)
           os.chmod(dir, 0777)
-        for dir in (mosflm_directory,):
+        for dir in (self.mosflm_raw_data_input_file_dir, mosflm_directory):
           self.create_directories(dir)
           logging.info("Creating MOSFLM processing input file directory: %s", dir)
           os.chmod(dir, 0777)
