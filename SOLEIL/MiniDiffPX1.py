@@ -195,8 +195,11 @@ class MiniDiffPX1(MiniDiff):
                        self.calib_y = float(calibrationData.pixelsPerMmZ)
                        self.beam_xc = float(calibrationData.beamPositionX)
                        self.beam_yc = float(calibrationData.beamPositionY)
-                       self.light_level = float(position.lightLevel)
-                       self.lightMotor.move(self.light_level)
+                       #check light positionself.
+                       #if self.lightWago is not None :
+                       if self.lightWago.currentState == "in":
+                           self.light_level = float(position.lightLevel)
+                           self.lightMotor.move(self.light_level)
                        #print "CALIBR:", (self.calib_x, self.calib_y)
                        #print "BEAMXY:", (self.beam_xc, self.beam_yc)
                        return (self.calib_x or 0, self.calib_y or 0)
@@ -371,16 +374,18 @@ class MiniDiffPX1(MiniDiff):
 
    @task
    def start3ClickCentring(self, sample_info=None):
-       logging.getLogger("HWR").info(">>>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
-       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
- 
-       self.setCentringPhase()
-
+       
        if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
-
-       #self.currentCentringProcedure = gevent.spawn(sample_centring.manual_centring, 
+           
+       logging.getLogger("HWR").info(">>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
+       
+       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+       self.setCentringPhase()
+              
+       #self.currentCentringProcedure = gevent.spawn(sample_centring.manual_centring,
+       self.emitProgressMessage("Starting manual centring procedure...")
        self.currentCentringProcedure = sample_centring.manual_centring( {"phi":self.centringPhi,
                                                      "phiy":self.centringPhiz,
                                                      "sampx": self.centringSamplex,
@@ -401,14 +406,15 @@ class MiniDiffPX1(MiniDiff):
 
    @task
    def startAutoCentring(self, sample_info=None, loop_only=False):
-
-        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
-        self.setCentringPhase()
-
+       
         if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
-
+           
+        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+        self.setCentringPhase()
+        
+        
         self.emitProgressMessage("Starting automatic centring procedure...")
         self.currentCentringProcedure = sample_centring.start_auto(self.camera,
                                                                    {"phi":self.centringPhi,
