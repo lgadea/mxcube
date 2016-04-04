@@ -47,6 +47,7 @@ class MiniDiffPX1(MiniDiff):
    
        self.permit = True
        self.phase = None
+       self.light_level = None
 
        bs_prop=self.getProperty("bstop")
        self.bstop_ho = None
@@ -375,14 +376,17 @@ class MiniDiffPX1(MiniDiff):
    @task
    def start3ClickCentring(self, sample_info=None):
        
+       
+       self.setCentringPhase()
+       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+       
        if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
            
        logging.getLogger("HWR").info(">>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
        
-       self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
-       self.setCentringPhase()
+       
               
        #self.currentCentringProcedure = gevent.spawn(sample_centring.manual_centring,
        self.emitProgressMessage("Starting manual centring procedure...")
@@ -406,13 +410,15 @@ class MiniDiffPX1(MiniDiff):
 
    @task
    def startAutoCentring(self, sample_info=None, loop_only=False):
-       
+        
+        self.setCentringPhase()
+        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
+        
         if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
            
-        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
-        self.setCentringPhase()
+        
         
         
         self.emitProgressMessage("Starting automatic centring procedure...")
