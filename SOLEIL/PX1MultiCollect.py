@@ -15,6 +15,7 @@ import re
 import PyTango
 from PyTango import DeviceProxy
 from collections import namedtuple
+import SOLEILMergeImage as mergeImage
 
 # PL.
 def chmod_dir(dirname):    
@@ -313,9 +314,12 @@ class PixelDetector:
                       self.wait_image_on_disk(abs_filename)
                       self.wait_collectServer_ready()
                       self.wait_image_compil_on_disk(abs_filename_log)
-                      self.merge(abs_filename_log, templateImage, start, 
-                                 self.dcpars['oscillation_sequence'][0]['range'], 
-                                 self.dcpars['oscillation_sequence'][0]['exposure_time'])
+                      mergeImage.merge(abs_filename,
+                                       templateImage,
+                                       self.dcpars['fileinfo']['directory'],
+                                       start,
+                                       self.dcpars['oscillation_sequence'][0]['range'],
+                                       self.dcpars['oscillation_sequence'][0]['exposure_time'])  
                       self.adxv_show_latest(filename=abs_lastImage)
                       #here insert merge2
                       start += 90.
@@ -427,7 +431,7 @@ class PixelDetector:
                logging.info("Giving up waiting for image. Timeout")
                break
             time.sleep(0.1)
-        logging.info("################  Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
+        logging.info("Waiting for image %s ended in  %3.2f secs" % (filename, time.time()-start_wait))
 
     def adxv_sync(self, imgname):
         # connect to adxv to show the image
@@ -490,146 +494,6 @@ class PixelDetector:
         except:
             self.adxv_socket = None
             logging.getLogger().info("WARNING: Can't connect to ADXV.")
- 
-#==============================================================================
-#    Block Merge2cbf and fill new header
-#==============================================================================
-     
-    def fillHeader(self,filenameS,filenameD,start,increment,expotime):
-        param = [start,increment]
-        bufFile = None    
-        l = 0
-        #firstline = ''
-        templist = []
-        
-        with open(filenameS , 'r') as f:
-            f.readline()
-            for line in f :
-                l +=1
-                #if 'data_' in line :
-                #   tempnameS = line
-                if '###' in line :
-                    templist.append(line)
-                if '# ' in line :
-                    templist.append(line)
-        i=0
-        for ilist,iparam in zip (templist[18:20],param) :
-            ilist = re.sub('\d','?',ilist)
-            ncar = '?'*(ilist.count('?')-5)+'?.????'
-            ilist = ilist.replace(ncar,'%05.4f')
-            ilist = ilist % float(iparam)
-            templist[18+i] = ilist
-            i += 1
-        exposure = re.sub('\d','?',templist[4])
-        exposure = exposure.replace('?.???????','%08.7f')
-        exposure = exposure % float(expotime)
-        templist[4] = exposure        
-        
-        strlist = "".join(templist)
-        with open(filenameD, "r") as in_file:
-            bufFile = in_file.readlines()
-        
-        with open(filenameD, "w") as out_file:
-            flag = 0
-            for line in bufFile:
-                if '###' in line :
-                   line = '###CBF: Files generated from 10 image to XDS analysis \n'               
-                if 'data_' in line :
-                   line = 'data_'+os.path.basename(filenameD)+' \n'
-                if ";" in line and flag == 0:
-                    line = line + strlist
-                    flag += 1
-                out_file.write(line)
-        
-    def run_job(self, executable, arguments = [], stdin = [], working_directory = None):
-        '''Run a program with some command-line arguments and some input,
-        then return the standard output when it is finished.'''
-        
-        working_directory = self.dcpars['fileinfo']['directory']
-        if working_directory is None:
-            working_directory = os.getcwd()
-    
-        command_line = '%s' % executable
-        for arg in arguments:
-            command_line += ' "%s"' % arg
-    
-        popen = subprocess.Popen(command_line,
-                                 bufsize = 1,
-                                 stdin = subprocess.PIPE,
-                                 stdout = subprocess.PIPE,
-                                 stderr = subprocess.STDOUT,
-                                 cwd = working_directory,
-                                 universal_newlines = True,
-                                 shell = True,
-                                 env = os.environ)
-    
-        for record in stdin:
-            popen.stdin.write('%s\n' % record)
-    
-        popen.stdin.close()
-    
-        output = []
-    
-        while True:
-            record = popen.stdout.readline()
-            if not record:
-                break
-    
-            output.append(record)
-    
-        return output
-
-    def run_merge2cbf(self, linked_file_template, image_range, output_template):
-        
-        MERGE2CBF_file = os.path.join(self.dcpars['fileinfo']['directory'], 'MERGE2CBF.INP')
-        inpf = open(MERGE2CBF_file, 'w')
-        inpf.write(
-            'NAME_TEMPLATE_OF_DATA_FRAMES=%s\n' % linked_file_template +
-            'DATA_RANGE= %d %d\n' % image_range +
-            'NAME_TEMPLATE_OF_OUTPUT_FRAMES=%s\n' % output_template +
-            'NUMBER_OF_DATA_FRAMES_COVERED_BY_EACH_OUTPUT_FRAME=%d\n' %
-            image_range[1])
-        inpf.close()
-        output = self.run_job('merge2cbf')
-        #print "".join(output)
-        logging.info("################  run_merge2cbf Process end  >>>>>>>>>>>>>>>>>> %s" % "".join(output))
-
-    def merge(self,filenamelog, templateImage, startAngle,nOscillation,expotime):
-        '''Merge the cbf images of 10  files .'''
-        output_template = 'summed_????.cbf'
-        MergeInDir = self.dcpars['fileinfo']['directory']
-        finalName = os.path.join(MergeInDir,templateImage)
-        if os.path.exists(filenamelog):
-            filenames = []
-            fileoscillation_i = ""
-            with open(filenamelog , 'r') as f:
-                for line in f :
-                    if 'ramdisk' in line :
-                        lineitem = line.split(' ') 
-                        ramdiskpath = lineitem[-1].rstrip()
-                        fileoscillation_i = os.path.join(MergeInDir,os.path.basename(ramdiskpath))
-                        filenames.append(fileoscillation_i)
-            #template = self.dcpars['fileinfo']['template'] #ref-blabla_1_%04d.cbf        
-            template = 'to_sum_%04d.cbf'#filename destination
-            
-            for j, filename in enumerate(filenames):
-                os.symlink(os.path.abspath(filename), os.path.join(
-                    MergeInDir, template % (j + 1)))
-                 
-            self.run_merge2cbf(template.replace('%04d', '????'), (1, len(filenames)),
-                         output_template)
-                
-            for j in range(len(filenames)):
-                os.remove(os.path.join(MergeInDir, template % (j + 1)))
-            
-            os.rename(os.path.join(MergeInDir,'summed_0001.cbf'), finalName)
-            self.fillHeader(filenames[0],finalName,startAngle,nOscillation,expotime)
-        else :
-          logging.info("################  Merge Process file not exist ")  
-        
-#==============================================================================
-# 
-#==============================================================================
 
 class PilatusDetector(PixelDetector):
     pass
