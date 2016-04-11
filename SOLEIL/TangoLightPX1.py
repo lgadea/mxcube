@@ -65,22 +65,22 @@ class TangoLightPX1(Device):
         self.emit('wagoStateChanged', (self.currentState, ))
         
     def getWagoState(self):
-        logging.getLogger("HWR").info('TangoLightPX1. getWagoState: %s' % self.currentState)
+        #logging.getLogger("HWR").info('TangoLightPX1. getWagoState: %s' % self.currentState)
         return self.currentState 
 
     def getState(self):
         return self.currentState 
 
     def wagoIn(self):
-        logging.getLogger("HWR").info('TangoLightPX1. GoToVisuSamplePhase.')
+        #logging.getLogger("HWR").info('TangoLightPX1. GoToVisuSamplePhase.')
         if not self.px1env.readyForVisuSample:
-            logging.getLogger("HWR").info('TangoLightPX1. Inserting Light.')       
+            #logging.getLogger("HWR").info('TangoLightPX1. Inserting Light.')       
             self.px1env.GoToVisuSamplePhase()
             debut = time.time()
             while self.px1env.readyForVisuSample != True:
                 time.sleep(0.1)
 	        if (time.time() - debut) > 20:
-                   logging.debug("PX1Xanes - Timed out while going to FluoXPhase")
+                #logging.debug("PX1Xanes - Timed out while going to FluoXPhase")
 	           break
         #if str(self.beamstopState.getValue()) == 'INSERT':
 	    #self.beamstop_out()
@@ -112,7 +112,7 @@ class TangoLightPX1(Device):
               self.set_in()
  
     def wagoOut(self):
-        logging.getLogger("HWR").info('TangoLightPX1:  in WagoOut ')
+        #logging.getLogger("HWR").info('TangoLightPX1:  in WagoOut ')
         self.setOut()
 
     def setOut(self):
