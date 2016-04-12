@@ -383,11 +383,11 @@ class PX1Cats(SampleChanger):
         if self.infomode:
             logging.warning("PX1Cats. It is in info mode only. Command %s ignored" % taskname)
             return 
-        self._waitDeviceReady(3.0)
+        #self._waitDeviceReady(3.0)
         #if states == None:
         #    states = [SampleChangerState.Ready, SampleChangerState.StandBy]
 
-        #self._waitDeviceState( states, 3.0 )
+        self._waitDeviceState( states, 3.0 )
 
         if argin == None:
            task_id = method()
@@ -417,7 +417,7 @@ class PX1Cats(SampleChanger):
         :returns: None
         :rtype: None
         """
-        with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
+        with gevent.Timeout(timeout, Exception("Timeout pathrunning waiting for device ready")):
             while not self._chnPathRunning.getValue():
                 gevent.sleep(0.01)
 
@@ -515,7 +515,7 @@ class PX1Cats(SampleChanger):
         :rtype: None
         """
 
-        with gevent.Timeout(timeout, Exception("Timeout waiting for device ready")):
+        with gevent.Timeout(timeout, Exception("Timeout waiting for device state is ready")):
             waiting = True
             while not waiting:
                 state = self._readState()
