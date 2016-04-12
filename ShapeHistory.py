@@ -333,8 +333,8 @@ class DrawingEvent(QubDrawingEvent):
             if modifier:
                 clicked_shape = shape
                 break
-
-        self.move_to_centred_position_cb(clicked_shape.\
+        if clicked_shape is not None :
+            self.move_to_centred_position_cb(clicked_shape.\
                                          get_centred_positions()[0])
     def mousePressed(self, x, y):
         """
