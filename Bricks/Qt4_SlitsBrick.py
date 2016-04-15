@@ -86,9 +86,7 @@ class Qt4_SlitsBrick(BlissWidget):
 
         # Graphic elements ----------------------------------------------------
         self.main_gbox = QtGui.QGroupBox('Slits', self) #h
-	#Horizontal gap
         hor_label = QtGui.QLabel("Horizontal:", self.main_gbox)
-	#self.box1 = QHBox(self.paramsBox)
         self.current_hor_pos_ledit = QtGui.QLineEdit(self.main_gbox)
 	self.current_hor_pos_ledit.setAlignment(QtCore.Qt.AlignRight)
         boldFont = self.current_hor_pos_ledit.font()
@@ -102,9 +100,11 @@ class Qt4_SlitsBrick(BlissWidget):
 	self.set_hor_gap_button = QtGui.QPushButton(\
              Qt4_Icons.load_icon("Draw"), "", self.main_gbox)
 	self.set_hor_gap_button.setEnabled(False)
+        self.set_hor_gap_button.setFixedWidth(27)
 	self.stop_hor_button = QtGui.QPushButton(\
              Qt4_Icons.load_icon("Stop2"), "", self.main_gbox)
 	self.stop_hor_button.setEnabled(False)
+        self.stop_hor_button.setFixedWidth(27)
 
 	#Vertical gap
         ver_label = QtGui.QLabel("Vertical:", self.main_gbox)
@@ -119,9 +119,11 @@ class Qt4_SlitsBrick(BlissWidget):
 	self.set_ver_gap_button = QtGui.QPushButton(\
              Qt4_Icons.load_icon("Draw"), "", self.main_gbox)
 	self.set_ver_gap_button.setEnabled(False)
+        self.set_ver_gap_button.setFixedWidth(27)
 	self.stop_ver_button = QtGui.QPushButton(\
              Qt4_Icons.load_icon("Stop2"), "", self.main_gbox)
 	self.stop_ver_button.setEnabled(False)
+        self.stop_ver_button.setFixedWidth(27)
 
         # Layout --------------------------------------------------------------
         _main_gbox_gridlayout = QtGui.QGridLayout(self.main_gbox)
@@ -168,14 +170,14 @@ class Qt4_SlitsBrick(BlissWidget):
         self.set_ver_gap_button.setToolTip("Set new vertical gap size")
         self.stop_ver_button.setToolTip("Stop vertical slits movements")
 
-    def propertyChanged(self, property, oldValue, newValue):
-        if property == 'mnemonic':
+    def propertyChanged(self, property_name, old_value, new_value):
+        if property_name == 'mnemonic':
 	    if self.slitbox_hwobj is not None:
 		self.disconnect(self.slitbox_hwobj, QtCore.SIGNAL('gapSizeChanged'), self.gap_value_changed)
 		self.disconnect(self.slitbox_hwobj, QtCore.SIGNAL('statusChanged'), self.gap_status_changed)
 	        self.disconnect(self.slitbox_hwobj, QtCore.SIGNAL('focusModeChanged'), self.focus_mode_changed)
 	        self.disconnect(self.slitbox_hwobj, QtCore.SIGNAL('gapLimitsChanged'), self.gap_limits_changed)
-	    self.slitbox_hwobj = self.getHardwareObject(newValue)
+	    self.slitbox_hwobj = self.getHardwareObject(new_value)
 	    if self.slitbox_hwobj is not None:
 		self.connect(self.slitbox_hwobj, QtCore.SIGNAL('gapSizeChanged'), self.gap_value_changed)
 		self.connect(self.slitbox_hwobj, QtCore.SIGNAL('statusChanged'), self.gap_status_changed)
@@ -187,7 +189,7 @@ class Qt4_SlitsBrick(BlissWidget):
 	    else:
                 self.slitBoxNotReady()
         else:
-            BlissWidget.propertyChanged(self,property,oldValue,newValue)
+            BlissWidget.propertyChanged(self, property_name, old_value, new_value)
     
     def initiate_spinboxes(self):
         stepSizes = self.slitbox_hwobj.get_step_sizes()
@@ -219,34 +221,23 @@ class Qt4_SlitsBrick(BlissWidget):
 
     def hor_gap_edited(self, text):
         Qt4_widget_colors.set_widget_color(self.hor_pos_dspinbox.lineEdit(),
-                                              Qt4_widget_colors.ORANGE,
+                                              Qt4_widget_colors.LINE_EDIT_CHANGED,
                                               QtGui.QPalette.Base)
 
     def ver_gap_edited(self, text):
         Qt4_widget_colors.set_widget_color(self.ver_pos_dspinbox.lineEdit(),
-                                              Qt4_widget_colors.ORANGE,
+                                              Qt4_widget_colors.LINE_EDIT_CHANGED,
                                               QtGui.QPalette.Base)
 
     def change_hor_gap(self):
-	#try:
-        if True:
-            val = self.hor_pos_dspinbox.value() / 1000.0
-            print val
-            self.slitbox_hwobj.set_gap('Hor', val)
-            self.hor_pos_dspinbox.clearFocus()
-	#except (ValueError,TypeError):
-        #    return
+        val = self.hor_pos_dspinbox.value() / 1000.0
+        self.slitbox_hwobj.set_gap('Hor', val)
+        self.hor_pos_dspinbox.clearFocus()
     
     def change_ver_gap(self):
-	try:
-	    #val = self.ver_pos_dspinbox.value() / float (10**self.decimalPlaces)
-            val = self.ver_pos_dspinbox.value() / 1000.0
-            self.slitbox_hwobj.set_gap('Ver', val)
-            #Qt4_widget_colors.set_widget_color(self.ver_pos_dspinbox,
-            #                                   Qt4_SlitsBrick.CONNECTED_COLOR)
-            self.ver_pos_dspinbox.clearFocus()
-	except (ValueError, TypeError):
-	    return
+        val = self.ver_pos_dspinbox.value() / 1000.0
+        self.slitbox_hwobj.set_gap('Ver', val)
+        self.ver_pos_dspinbox.clearFocus()
 
     def slitBoxReady(self):
 	self.main_gbox.setEnabled(True)

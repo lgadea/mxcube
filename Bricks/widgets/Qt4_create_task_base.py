@@ -515,7 +515,7 @@ class CreateTaskBase(QtGui.QWidget):
                         self._acq_widget.update_kappa(cpos.kappa)
                         self._acq_widget.update_kappa_phi(cpos.kappa_phi)
                     if isinstance(item, Qt4_queue_item.TaskQueueItem):
-                        snapshot = self._graphics_manager_hwobj.get_snapshot(position)
+                        snapshot = self._graphics_manager_hwobj.get_scene_snapshot(position)
                         cpos.snapshot_image = snapshot
                         self._acquisition_parameters.centred_position = cpos
             else:
@@ -638,7 +638,7 @@ class CreateTaskBase(QtGui.QWidget):
         
         acq.path_template = self._create_path_template(sample, path_template)
 
-        if bl_setup.in_plate_mode():
+        if bl_setup.diffractometer_hwobj.in_plate_mode():
             acq.acquisition_parameters.take_snapshots = 0
 
         return acq

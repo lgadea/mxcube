@@ -59,7 +59,7 @@ class ProposalBrick2(BlissWidget):
         self.defineSignal('loggedIn', ())
         self.defineSignal('user_group_saved', ())
         self.defineSlot('setButtonEnabled',())
-        self.defineSlot('impersonateProposal',())
+        #self.defineSlot('impersonateProposal',())
 
         # Initialize GUI elements
         self.contentsBox=QHGroupBox("User",self)
@@ -203,11 +203,13 @@ class ProposalBrick2(BlissWidget):
         self.loginButton.setEnabled(state)
         self.logoutButton.setEnabled(state)
 
+    """
     def impersonateProposal(self,proposal_code,proposal_number):
         if BlissWidget.isInstanceUserIdInhouse():
             self._do_login(proposal_code, proposal_number, None, self.dbConnection.beamline_name, impersonate=True)
         else:
             logging.getLogger().debug('ProposalBrick2: cannot impersonate unless logged as the inhouse user!')
+    """
 
     # Opens the logout dialog (modal); if the answer is OK then logout the user
     def openLogoutDialog(self):
