@@ -354,7 +354,7 @@ class MiniDiffPX1(MiniDiff):
             logging.exception("Could not move to centred position")
             self.emitCentringFailed()
           else:
-            self.phiMotor.syncMoveRelative(-2*PHI_ANGLE_INCREMENT)
+            self.phiMotor.syncMoveRelative(-1*PHI_ANGLE_INCREMENT)
           logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
           self.emitCentringSuccessful()

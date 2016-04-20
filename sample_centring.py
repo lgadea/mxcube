@@ -73,7 +73,7 @@ def px1_center(phi, phiy,
   global USER_CLICKED_EVENT
   X, Y, PHI = [], [], []
   centredPosRel = {}
-  
+  phi.syncMoveRelative(-1*PHI_ANGLE_INCREMENT)
   try:  
     while True:
       logging.getLogger("HWR").info("waiting for user input")
