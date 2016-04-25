@@ -31,10 +31,10 @@ def fillHeader(instream,filenameD,start,angle,expotime):
     
     strlist = readHeader(instream,start,angle,expotime)
     
-    with open(filenameD, "rU") as in_file:
+    with open(filenameD, "r") as in_file:
         bufFile = in_file.readlines()
         
-    with open(filenameD, "rU+") as out_file:
+    with open(filenameD, "r+") as out_file:
         flag = 0
         for line in bufFile:
             if '###' in line :
@@ -125,7 +125,7 @@ def insertlines(outstream, metadata):
 
 def readHeader(instream,start,angle,expotime):
     
-    with open(instream , 'rU') as f:
+    with open(instream , 'r') as f:
         headerLine = f.read()
         hs,he = 0,0
         hs = headerLine.find(BLOCK_DATA)
