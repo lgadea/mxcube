@@ -125,7 +125,6 @@ class SOLEILLdapLogin(Procedure):
         return (True,username)
 
     def search_user(self,username,retry=True):
-        logging.getLogger("HWR").info("SoleilLdapLogin:  searching for %s " % username)
 
         try:
             found=self.ldapConnection.search_s(self.dcparts, ldap.SCOPE_SUBTREE, "uid="+username)
