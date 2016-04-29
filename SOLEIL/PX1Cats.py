@@ -809,9 +809,11 @@ class PX1Cats(SampleChanger):
         :rtype: None
         """
         if state:
-            self._executeServerTask(self._cmdOpenLid, "OpenLid")
+            self._cmdOpenLid()
+            #self._executeServerTask(self._cmdOpenLid, "OpenLid")
         else:
-            self._executeServerTask(self._cmdCloseLid, "CloseLid")
+            self._cmdCloseLid()
+            #self._executeServerTask(self._cmdCloseLid, "CloseLid")
            
     def _doToolOpen(self, state=False):
         """
