@@ -81,7 +81,7 @@ class MiniDiffPX1(MiniDiff):
        if self.sampleChanger is not None:
             self.scAuthChan = self.sampleChanger.getChannelObject("_chnSoftAuth")
             self.scAuthChan.connectSignal("update", self.SCauthorizationChanged )
-            logging.getLogger().info(" >>>>>>>>>>>  MiniDiffPX1. Connection to authorization signal done")
+            #logging.getLogger().info(" >>>>>>>>>>>  MiniDiffPX1. Connection to authorization signal done")
                     #self.connect(self.samplechanger, "gonioMovementAuthorized", self.SCauthorizationChanged )
        else:
             logging.getLogger().info("ERROR >>>>>> MiniDiffPX1. Cannot connect authorization signal. NO samplechanger")
@@ -119,11 +119,11 @@ class MiniDiffPX1(MiniDiff):
        #self.guillotine.setOut()
 
    def SCauthorizationChanged(self, value):
-       logging.getLogger("HWR").info(">>>>>>>> SCauthorizationChanged >>>>>>>>>>>>>>>>>>>>>>>>>>>>.%s: MiniDiff. Authorization from SC changed. Now is %s.", self.name(), value )              
+       #logging.getLogger("HWR").info(">>>>>>>> SCauthorizationChanged >>>>>>>>>>>>>>>>>>>>>>>>>>>>.%s: MiniDiff. Authorization from SC changed. Now is %s.", self.name(), value )              
        self.setAuthorizationFlag("samplechanger", value)
        #from SampleChanger
    def setAuthorizationFlag(self, flag, value):
-       logging.getLogger("HWR").info("<<<<<<<< setAuthorizationFlag <<<<<<<<<<<<<<<<<<<<,  flag ; %s - value :.%s", flag, value)
+       #logging.getLogger("HWR").info("<<<<<<<< setAuthorizationFlag <<<<<<<<<<<<<<<<<<<<,  flag ; %s - value :.%s", flag, value)
        
        if flag == "samplechanger":
             self.sc_permit = value
