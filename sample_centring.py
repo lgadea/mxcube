@@ -1,6 +1,7 @@
 from scipy import optimize
 import numpy
 import gevent.event
+import gevent
 import math
 import time
 import logging
@@ -41,11 +42,14 @@ class CentringMotor:
       return getattr(self.motor, attr)
   
 
+def stop_centring():
+    USER_CLICKED_EVENT.set("abort")
+
 def manual_centring(centring_motors_dict,
           pixelsPerMm_Hor, pixelsPerMm_Ver,
           beam_xc, beam_yc,
           chi_angle = 0,
-          n_points = 3):
+          n_points = 3,diffract=None):
 
   global CURRENT_CENTRING
 
@@ -59,7 +63,7 @@ def manual_centring(centring_motors_dict,
                                   pixelsPerMm_Hor, pixelsPerMm_Ver,
                                   beam_xc, beam_yc,
                                   chi_angle,
-                                  n_points)
+                                  n_points, diffract)
 
   return CURRENT_CENTRING
 
@@ -68,7 +72,7 @@ def px1_center(phi, phiy,
            pixelsPerMm_Hor, pixelsPerMm_Ver,
            beam_xc, beam_yc,
            chi_angle,
-           n_points):
+           n_points,diffract):
 
   global USER_CLICKED_EVENT
   X, Y, PHI = [], [], []
@@ -76,8 +80,20 @@ def px1_center(phi, phiy,
   phi.syncMoveRelative(-1*PHI_ANGLE_INCREMENT)
   try:  
     while True:
-      logging.getLogger("HWR").info("waiting for user input")
-      x, y = USER_CLICKED_EVENT.get()
+      logging.getLogger("HWR").info("waiting for user input %s" % str(len(X)+1))
+      if diffract:
+          diffract.wait_user("point %s" % str(len(X)+1))
+      user_info = USER_CLICKED_EVENT.get()
+      if user_info == "abort":
+         if diffract:
+             diffract.wait_user_end()
+         abort_centring()
+         return None
+      else:   
+          x,y = user_info
+ 
+      if diffract:
+          diffract.wait_user_end()
       logging.getLogger("HWR").info("   got user input x=%f / y=%f" % (x,y))
       USER_CLICKED_EVENT = gevent.event.AsyncResult()  
 
@@ -94,6 +110,9 @@ def px1_center(phi, phiy,
                                X[1] - beam_xc, Y[1] - beam_yc,
                                X[2] - beam_xc, Y[2] - beam_yc)
     PhiCamera=90
+
+    if diffract:
+        diffract.wait_user_finished()
 
     logging.getLogger("HWR").info("MANUAL_CENTRING: X=%s, Y=%s (Calib=%s/%s) (BeamCen=%s/%s)" % (X, Y, pixelsPerMm_Hor, pixelsPerMm_Ver, beam_xc, beam_yc))
 
@@ -115,11 +134,14 @@ def px1_center(phi, phiy,
     y_echantillon_real=1000.*y_echantillon/pixelsPerMm_Hor + sampy.getPosition()
     z_echantillon_real=1000.*z_echantillon/pixelsPerMm_Hor + phiy.getPosition()
 
+    
     if (z_echantillon_real + phiy.getPosition() < phiy.getLimits()[0]*2) :
+        logging.getLogger("HWR").info("phiy limits: %s" % str(phiy.getLimits()))
+        logging.getLogger("HWR").info(" requiring: %s" % str(z_echantillon_real + phiy.getPosition()))
         logging.getLogger("HWR").error("loop too long")
         centredPos = {}
         move_motors(SAVED_INITIAL_POSITIONS)
-        raise
+        raise Exception()
 
     centred_pos = SAVED_INITIAL_POSITIONS.copy()
     centred_pos.update({ sampx.motor: x_echantillon_real,
@@ -130,12 +152,18 @@ def px1_center(phi, phiy,
   #except Exception, e:
     #logging.getLogger("HWR").error("MiniDiffPX1: Centring error: %s" % e)
   except: 
-    import traceback
-    logging.getLogger("HWR").error("MiniDiffPX1: Centring error")
-    logging.getLogger("HWR").info( traceback.format_exc() )
+    if diffract:
+        diffract.wait_user_end()
+    logging.getLogger("HWR").error("Exception. Centring aborted")
+    abort_centring()
+    return None
 
+def abort_centring():
+    logging.getLogger("HWR").error("aborted")
+    logging.getLogger("HWR").error("Restoring motor positions")
     move_motors(SAVED_INITIAL_POSITIONS)
-    raise
+    logging.getLogger("HWR").error("Motors moved back to original position")
+    return None
 
 def prepare(centring_motors_dict):
   global SAVED_INITIAL_POSITIONS
@@ -163,7 +191,11 @@ def start(centring_motors_dict,
           n_points = 3):
   global CURRENT_CENTRING
 
+  logging.getLogger("HWR").info("  -- preparing motors for centring")
+
   phi, phiy, sampx, sampy = prepare(centring_motors_dict)
+
+  logging.getLogger("HWR").info("  -- preparing motors for centring done")
 
   CURRENT_CENTRING = gevent.spawn(center, 
                                   phi,
@@ -191,19 +223,24 @@ def ready(*motors):
   #return not any([m.motorIsMoving() for m in motors])
 
 def move_motors(motor_positions_dict):
+  logging.getLogger("HWR").info("  starting move motors")
+
   def wait_ready(timeout=None):
     with gevent.Timeout(timeout):
       while not ready(*motor_positions_dict.keys()):
-        time.sleep(0.1)
+        gevent.sleep(0.1)
       logging.getLogger("HWR").info("  -- wait ready done")
 
   wait_ready(timeout=3)
+
+  logging.getLogger("HWR").info("  motors are ready now")
 
   if not ready(*motor_positions_dict.keys()):
     raise RuntimeError("Motors not ready")
 
   xyz_togo = {}
   moveXYZ = None
+
   for motor, position in motor_positions_dict.iteritems():
     motname = motor.name()
     logging.getLogger("HWR").info("  -- moving motor %s to position %s " % (motname,position))
@@ -211,7 +248,9 @@ def move_motors(motor_positions_dict):
        xyz_togo[motname] = position
        moveXYZ = motor.getCommandObject("moveAbsoluteXYZ")
     else:
+       logging.getLogger("HWR").info("  moving motor %s to %s" % (motor,position))
        motor.move(position)
+       logging.getLogger("HWR").info("  moving motor %s done" % (motor))
 
   # move microglide
   if moveXYZ:
@@ -228,8 +267,11 @@ def move_motors(motor_positions_dict):
         glide_goto = [xyz_togo['/uglidex'], xyz_togo['/uglidey'], xyz_togo['/uglidez']]
         logging.getLogger("HWR").info("  -- moving microglide motors") 
         moveXYZ(glide_goto)
+        logging.getLogger("HWR").info("  -- moving microglide done") 
   
+  logging.getLogger("HWR").info("  -- waiting for all motors to stop")
   wait_ready()
+  logging.getLogger("HWR").info("  -- waiting for all motors to stop done")
   
 def user_click(x,y, wait=False):
   READY_FOR_NEXT_POINT.clear()

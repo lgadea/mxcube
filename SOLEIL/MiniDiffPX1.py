@@ -338,8 +338,16 @@ class MiniDiffPX1(MiniDiff):
         logging.info("manual centring DONE")
         try:
           motor_pos = manual_centring_procedure.get()
+
           if isinstance(motor_pos, gevent.GreenletExit):
-            raise motor_pos
+             raise motor_pos
+
+          if motor_pos is None:
+             self.emitProgressMessage("Centring position aborted. Motor positions are restored")
+             logging.info("Centring position aborted. Motor positions are restored")
+             self.wait_user_finished()
+             self.emitCentringFailed()
+             return
         except:
           logging.exception("Could not complete manual centring")
           self.emitCentringFailed()
@@ -371,11 +379,12 @@ class MiniDiffPX1(MiniDiff):
        self.emit('zoomMotorPredefinedPositionChanged', (positionName, offset, ))
 
    def start3ClickCentring_nonblocking(self, sample_info=None):
+       logging.info("Three click centering starting")
        self.start3ClickCentring(sample_info=None,wait=False)
+       logging.info("Three click centering started. Returning control")
 
    @task
    def start3ClickCentring(self, sample_info=None):
-       
        
        self.setCentringPhase()
        self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
@@ -399,7 +408,7 @@ class MiniDiffPX1(MiniDiff):
                                                      self.pixelsPerMmY,
                                                      self.pixelsPerMmZ,
                                                      self.getBeamPosX(),
-                                                     self.getBeamPosY())
+                                                     self.getBeamPosY(),diffract=self)
 
        self.currentCentringProcedure.link(self.manualCentringDone)
 
@@ -440,6 +449,20 @@ class MiniDiffPX1(MiniDiff):
 
    #def imageClicked(self, x, y, xi, yi):
    #    USER_CLICKED_EVENT.set((x,y))
+
+   def wait_user(self, extra_msg=None):
+       self.emit("centringState", "waiting")
+       msg = "Click on sample to centre. "
+       if extra_msg:
+           msg += extra_msg
+       self.emitProgressMessage(msg)
+
+   def wait_user_end(self):
+       self.emit("centringState", "busy")
+       self.emitProgressMessage("Please wait...")
+
+   def wait_user_finished(self):
+       self.emit("centringState", "finished")
 
    def getPositions(self):
       logging.debug("getPositions. saving values sampx, sampy, phiz= (%s, %s, %s)" % (self.sampleXMotor.getPosition(), self.sampleYMotor.getPosition(), self.phizMotor.getPosition()))
@@ -506,7 +529,7 @@ class MiniDiffPX1(MiniDiff):
        while elapsed < 5.0:
            if self.permit:
                break
-           time.sleep(0.1)
+           gevent.sleep(0.1)
            elapsed = time.time() - t0
 
        if not self.permit:
@@ -514,7 +537,9 @@ class MiniDiffPX1(MiniDiff):
            return
        
        _ready = self.px1env_ho.readyForCentring()
+
        logging.info("MiniDiffPX1: readyForCentring = %s" % _ready)
+
        if not _ready:
            self.px1env_ho.setPhase(EnvironmentPhase.CENTRING)
        else:

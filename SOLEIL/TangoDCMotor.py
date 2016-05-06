@@ -5,9 +5,10 @@ import time
 from HardwareRepository.BaseHardwareObjects import Device
 from HardwareRepository.Command.Tango import TangoCommand
 
-from PyTango import DeviceProxy
+from PyTango.gevent import DeviceProxy
 
 from qt import qApp
+import gevent
 
 class TangoDCMotor(Device):
     
@@ -168,16 +169,16 @@ class TangoDCMotor(Device):
         self.positionChan.setValue( self.convertValue(self.positionValue) )
 
         dev = DeviceProxy(self.tangoname)
-        time.sleep(0.5) # allow MD2 to change the state
+        #gevent.sleep(0.5) # allow MD2 to change the state
 
         mystate = str( dev.State() )
         logging.info("TangoDCMotor: %s syncMoveRelative state is %s / %s " % ( self.tangoname, str( self.stateValue ), mystate))
 
         while mystate == "RUNNING" or mystate == "MOVING":
             logging.info("TangoDCMotor: syncMoveRelative is moving %s" % str( mystate ))
-            time.sleep(0.1)
+            gevent.sleep(0.03)
             mystate = str( dev.State() )
-            qApp.processEvents(100)
+            #qApp.processEvents(100)
         
     def getMotorMnemonic(self):
         return self.name()
@@ -188,11 +189,12 @@ class TangoDCMotor(Device):
         Arguments:
         absolutePosition -- position to move to
         """
-        #logging.getLogger("TangoClient").info("TangoDCMotor move. Trying to go to %s: type '%s'", absolutePosition, type(absolutePosition))
+        logging.getLogger("TangoClient").info("-------------------- TangoDCMotor move (%s). Trying to go to %s" % (self.tangoname, absolutePosition))
         if type(absolutePosition) != float and type(absolutePosition) != int:
             self.positionChan.setValue(self.convertValue(absolutePosition))
         else:
             self.positionChan.setValue(absolutePosition)
+        logging.getLogger("TangoClient").info("-------------------- TangoDCMotor move. done")
 
     def stop(self):
         logging.getLogger("HWR").info("TangoDCMotor.stop")

@@ -2,6 +2,7 @@ import logging
 import time
 
 #from PyTango import DeviceProxy
+from PyTango.gevent import DeviceProxy
 from HardwareRepository.Command.Tango import TangoCommand
 from HardwareRepository.Command.Tango import DeviceProxy as HRDvProxy
 from HardwareRepository.BaseHardwareObjects import Equipment
@@ -34,8 +35,10 @@ class GonioPositions(Equipment):
             #logging.getLogger("HWR").info("Device found: %s" % dev.tangoname)
 
         try:
-            self.guillot = HRDvProxy(self.getProperty("tangoname_guillot"))
-            self.microglide = HRDvProxy(self.getProperty("tangoname_microglide"))
+            #self.guillot = HRDvProxy(self.getProperty("tangoname_guillot"))
+            #self.microglide = HRDvProxy(self.getProperty("tangoname_microglide"))
+            self.guillot = DeviceProxy(self.getProperty("tangoname_guillot"))
+            self.microglide = DeviceProxy(self.getProperty("tangoname_microglide"))
 
             try:
                 currentAuthorization = self.getChannelObject('GonioMovementAuthorized').getValue()

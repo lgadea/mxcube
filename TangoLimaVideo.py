@@ -11,10 +11,12 @@ import os
 import time
 import sys
 import PyTango
+
 try:
    from PyTango.gevent import DeviceProxy
 except ImportError:
    from PyTango import DeviceProxy
+
 import numpy
 import struct
 

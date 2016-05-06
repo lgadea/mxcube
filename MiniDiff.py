@@ -370,7 +370,9 @@ class MiniDiff(Equipment):
                     
         if self.currentCentringProcedure is not None:
             try:
-                self.currentCentringProcedure.kill()
+                sample_centring.stop_centring()
+                #self.currentCentringProcedure.kill()
+                logging.getLogger("HWR").exception("MiniDiff: centring procedure aborted")
             except:
                 logging.getLogger("HWR").exception("MiniDiff: problem aborting the centring method")
             try:
