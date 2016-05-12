@@ -2,10 +2,12 @@
 
 import time
 import logging
-import PyTango
+import gevent
+
+from PyTango.gevent import DeviceProxy
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Device
-import gevent
+from HardwareRepository.TaskUtils import *
 
 class EnvironmentPhase:
 
@@ -77,14 +79,12 @@ class PX1Environment(Device):
 
     def init(self):
               
-        self.device = PyTango.DeviceProxy(self.getProperty("tangoname"))
-        #self.state
+        self.device = DeviceProxy(self.getProperty("tangoname"))
+    
         try:
             self.chanStatus = self.getChannelObject('State')
             self.chanStatus.connectSignal('update', self.stateChanged)
             logging.getLogger().info('%s: Connected to State channel.', self.name())
-            #state = self.chanStatus.getValue()
-            #logging.getLogger().info('%s: stateChanged to %s' % (self.name(), state))
 	    
         except KeyError:
             logging.getLogger().warning('%s: cannot report State', self.name())
@@ -99,9 +99,17 @@ class PX1Environment(Device):
         except KeyError:
             logging.getLogger().warning('%s: cannot report State', self.name())
 
+        try:
+            self.usingCapillaryChannel = self.getChannelObject('usingCapillary')
+        except:
+            self.usingCapillaryChannel = None
+
+        try:
+            self.beamstopPositionChannel = self.getChannelObject('beamstopPosition')
+        except:
+            self.beamstopPositionChannel = None
+
         if self.device is not None:
-            #self.stateChan = self.getChannelObject("State")    
-            #self.stateChan.connectSignal("update", self.stateChanged)
             self.setIsReady(True)
 
             self.cmds = {
@@ -124,19 +132,15 @@ class PX1Environment(Device):
 
     def readState(self):
         state = str(self.chanStatus.getValue())
-        #try:
-	#    state = self.device.State()
         logging.getLogger().info('%s: readState: %s' % (self.name(), state))
         return state 
 
     def isBusy(self, timeout=None):
-        #state = self.device.State()
         state = self.stateChan.getValue()
         return state not in [EnvironmentState.ON,]
 
     def waitReady(self, timeout=None):
         logging.debug("PX1environment: waitReady")
-        #self._waitState([EnvironmentState.ON,], timeout)
         self._waitState(["ON",], timeout)
 
     def _waitState(self, states, timeout=None):
@@ -264,6 +268,34 @@ class PX1Environment(Device):
         # make here the logic with eventually other permits (like hardware permit)
         self.emit("operationPermitted", value)
 
+    def getUsingCapillary(self):
+        if self.usingCapillaryChannel is not None:
+           return self.usingCapillaryChannel.getValue()
+
+    def setUsingCapillary(self,value):
+        self.capillary_value = value
+        gevent.spawn(self._setUsingCapillary)
+
+    @task
+    def _setUsingCapillary(self):
+        if self.usingCapillaryChannel is not None:
+           self.usingCapillaryChannel.setValue(self.capillary_value)
+           
+    def getBeamstopPosition(self):
+        if self.beamstopPositionChannel is not None:
+           return self.beamstopPositionChannel.getValue()
+
+    def setBeamstopPosition(self,value):
+        self.beamstop_position = value
+        gevent.spawn(self._setBeamstopPosition)
+
+    @task
+    def _setBeamstopPosition(self):
+        if self.beamstopPositionChannel is not None:
+           self.beamstopPositionChannel.setValue(self.beamstop_position)
+           
+
+
 def test():
     import os
     import time
@@ -279,15 +311,16 @@ def test():
     print "PX1 Environment ", env.isPhaseTransfer()
     print "       phase is ", env.readPhase()
     print "       state is ", env.readState()
+    print "   beamstop pos is ", env.getBeamstopPosition()
 
     print time.time() - t0
 
-    if not env.readyForTransfer():
-        print "Going to transfer phase"
-        env.setPhase(EnvironmentPhase.TRANSFER)
-        print time.time() - t0
-    print "done"
-    env.waitPhase(EnvironmentPhase.TRANSFER)
+    #if not env.readyForTransfer():
+    #    print "Going to transfer phase"
+    #    env.setPhase(EnvironmentPhase.TRANSFER)
+    #    print time.time() - t0
+    #print "done"
+    #env.waitPhase(EnvironmentPhase.TRANSFER)
     print time.time() - t0
 
 if __name__ == '__main__':

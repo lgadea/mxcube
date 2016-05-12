@@ -70,6 +70,18 @@ class MiniDiffPX1(MiniDiff):
                 import traceback
                 logging.getLogger().info("MiniDiffPX1.  Cannot load PX1Env %s" % str(px1env_prop))
                 logging.getLogger().info("    - reason: " + traceback.format_exc())
+
+       px1conf_prop=self.getProperty("px1configuration")
+       self.px1conf_ho = None
+
+       if px1conf_prop is not None:
+            try:
+                self.px1conf_ho=HardwareRepository.HardwareRepository().getHardwareObject(px1conf_prop)
+            except:
+                import traceback
+                logging.getLogger().info("MiniDiffPX1.  Cannot load PX1Configuration %s" % str(px1conf_prop))
+                logging.getLogger().info("    - reason: " + traceback.format_exc())
+
        self.phase = self.px1env_ho.readPhase()
 
        self.microglide = self.getDeviceByRole('microglide')
@@ -395,8 +407,10 @@ class MiniDiffPX1(MiniDiff):
            
        logging.getLogger("HWR").info(">>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
        
-       
-              
+       centring_points = self.px1conf_ho.getCentringPoints()       
+       centring_phi_incr = self.px1conf_ho.getCentringPhiIncrement()       
+       centring_sample_type = self.px1conf_ho.getCentringSampleType()       
+
        #self.currentCentringProcedure = gevent.spawn(sample_centring.manual_centring,
        self.emitProgressMessage("Starting manual centring procedure...")
        self.currentCentringProcedure = sample_centring.manual_centring( {"phi":self.centringPhi,
@@ -408,7 +422,9 @@ class MiniDiffPX1(MiniDiff):
                                                      self.pixelsPerMmY,
                                                      self.pixelsPerMmZ,
                                                      self.getBeamPosX(),
-                                                     self.getBeamPosY(),diffract=self)
+                                                     self.getBeamPosY(),
+                                                     n_points=centring_points, phi_incr=centring_phi_incr, sample_type=centring_sample_type,
+                                                     diffract=self)
 
        self.currentCentringProcedure.link(self.manualCentringDone)
 
@@ -421,15 +437,17 @@ class MiniDiffPX1(MiniDiff):
    def startAutoCentring(self, sample_info=None, loop_only=False):
         
         self.setCentringPhase()
+
         self.pixelsPerMmY, self.pixelsPerMmZ = self.getCalibrationData(self.zoomMotor.getPosition())
         
         if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
-           
         
-        
-        
+        centring_points = self.px1conf_ho.getCentringPoints()       
+        centring_phi_incr = self.px1conf_ho.getCentringPhiIncrement()       
+        centring_sample_type = self.px1conf_ho.getCentringSampleType()       
+
         self.emitProgressMessage("Starting automatic centring procedure...")
         self.currentCentringProcedure = sample_centring.start_auto(self.camera,
                                                                    {"phi":self.centringPhi,
@@ -441,6 +459,7 @@ class MiniDiffPX1(MiniDiff):
                                                                     "kappaPhiMotor": self.centringKappaPhi },
                                                                    self.pixelsPerMmY, self.pixelsPerMmZ,
                                                                    self.getBeamPosX(), self.getBeamPosY(),
+                                                                   n_points=centring_points, phi_incr=centring_phi_incr, sample_type=centring_sample_type,
                                                                    msg_cb=self.emitProgressMessage,
                                                                    new_point_cb=lambda point: self.emit("newAutomaticCentringPoint", point))
 

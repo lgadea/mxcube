@@ -175,6 +175,7 @@ class QueueManager(HardwareObject, QueueEntryContainer):
         self.set_pause(False)
         self.emit('queue_stopped', (None,))
         self._is_stopped = True
+        self._running = False
 
     def set_pause(self, state):
         """

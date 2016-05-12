@@ -27,7 +27,6 @@ USER_CLICKED_EVENT = None
 CURRENT_CENTRING = None
 SAVED_INITIAL_POSITIONS = {}
 READY_FOR_NEXT_POINT = gevent.event.Event()
-PHI_ANGLE_INCREMENT = 120
 
 class CentringMotor:
   def __init__(self, motor, reference_position=None, direction=1):
@@ -48,8 +47,8 @@ def stop_centring():
 def manual_centring(centring_motors_dict,
           pixelsPerMm_Hor, pixelsPerMm_Ver,
           beam_xc, beam_yc,
-          chi_angle = 0,
-          n_points = 3,diffract=None):
+          chi_angle=0,
+          n_points=3, phi_incr=90.0, sample_type="LOOP", diffract=None):
 
   global CURRENT_CENTRING
 
@@ -63,100 +62,124 @@ def manual_centring(centring_motors_dict,
                                   pixelsPerMm_Hor, pixelsPerMm_Ver,
                                   beam_xc, beam_yc,
                                   chi_angle,
-                                  n_points, diffract)
+                                  n_points, phi_incr, sample_type, diffract)
 
   return CURRENT_CENTRING
 
 def px1_center(phi, phiy,
-           sampx, sampy,
-           pixelsPerMm_Hor, pixelsPerMm_Ver,
-           beam_xc, beam_yc,
-           chi_angle,
-           n_points,diffract):
+               sampx, sampy,
+               pixelsPerMm_Hor, pixelsPerMm_Ver,
+               beam_xc, beam_yc,
+               chi_angle,
+               n_points,phi_incr,sample_type,diffract):
 
-  global USER_CLICKED_EVENT
-  X, Y, PHI = [], [], []
-  centredPosRel = {}
-  phi.syncMoveRelative(-1*PHI_ANGLE_INCREMENT)
-  try:  
-    while True:
-      logging.getLogger("HWR").info("waiting for user input %s" % str(len(X)+1))
-      if diffract:
-          diffract.wait_user("point %s" % str(len(X)+1))
-      user_info = USER_CLICKED_EVENT.get()
-      if user_info == "abort":
-         if diffract:
-             diffract.wait_user_end()
-         abort_centring()
-         return None
-      else:   
-          x,y = user_info
- 
-      if diffract:
-          diffract.wait_user_end()
-      logging.getLogger("HWR").info("   got user input x=%f / y=%f" % (x,y))
-      USER_CLICKED_EVENT = gevent.event.AsyncResult()  
+    global USER_CLICKED_EVENT
 
-      X.append(x)
-      Y.append(y)
-      PHI.append(phi.getPosition())
-      if len(X) == 3:
-        READY_FOR_NEXT_POINT.set()
-        break
-      phi.syncMoveRelative(PHI_ANGLE_INCREMENT)
-      READY_FOR_NEXT_POINT.set()
-
-    (dx1,dy1,dx2,dy2,dx3,dy3)=(X[0] - beam_xc, Y[0] - beam_yc,
-                               X[1] - beam_xc, Y[1] - beam_yc,
-                               X[2] - beam_xc, Y[2] - beam_yc)
     PhiCamera=90
 
-    if diffract:
-        diffract.wait_user_finished()
+    X, Y, PHI = [], [], []
+    P, Q, XB, YB, ANG = [], [], [], [], []
 
-    logging.getLogger("HWR").info("MANUAL_CENTRING: X=%s, Y=%s (Calib=%s/%s) (BeamCen=%s/%s)" % (X, Y, pixelsPerMm_Hor, pixelsPerMm_Ver, beam_xc, beam_yc))
+    centredPosRel = {}
 
-    a1=math.radians(PHI[0]+PhiCamera)
-    a2=math.radians(PHI[1]+PhiCamera)
-    a3=math.radians(PHI[2]+PhiCamera)
-    p01=(dy1*math.sin(a2)-dy2*math.sin(a1))/math.sin(a2-a1)        
-    q01=(dy1*math.cos(a2)-dy2*math.cos(a1))/math.sin(a1-a2)
-    p02=(dy1*math.sin(a3)-dy3*math.sin(a1))/math.sin(a3-a1)        
-    q02=(dy1*math.cos(a3)-dy3*math.cos(a1))/math.sin(a1-a3)
-    p03=(dy3*math.sin(a2)-dy2*math.sin(a3))/math.sin(a2-a3)        
-    q03=(dy3*math.cos(a2)-dy2*math.cos(a3))/math.sin(a3-a2)
+    if sample_type.upper() == "PLATE":
+        # go back half of the total range 
+        logging.getLogger("user_level_log").info("centerig in plate mode / n_points %s / incr %s" % (n_points, phi_incr))
+        half_range = (phi_incr * (n_points - 1))/2.0
+        phi.syncMoveRelative(-half_range)
+    else:
+        logging.getLogger("user_level_log").info("centerig in loop mode / n_points %s / incr %s " % (n_points, phi_incr))
 
-    x_echantillon=(p01+p02+p03)/3.0
-    y_echantillon=(q01+q02+q03)/3.0
-    z_echantillon=(-dx1-dx2-dx3)/3.0
+    try:  
+        # OBTAIN CLICKS
+        while True:
+            if diffract:
+                diffract.wait_user("point %s" % str(len(X)+1))
+            user_info = USER_CLICKED_EVENT.get()
+            if user_info == "abort":
+                if diffract:
+                    diffract.wait_user_end()
+                abort_centring()
+                return None
+            else:   
+                x,y = user_info
+       
+            if diffract:
+                diffract.wait_user_end()
     
-    x_echantillon_real=1000.*x_echantillon/pixelsPerMm_Hor + sampx.getPosition()
-    y_echantillon_real=1000.*y_echantillon/pixelsPerMm_Hor + sampy.getPosition()
-    z_echantillon_real=1000.*z_echantillon/pixelsPerMm_Hor + phiy.getPosition()
-
+            USER_CLICKED_EVENT = gevent.event.AsyncResult()  
     
-    if (z_echantillon_real + phiy.getPosition() < phiy.getLimits()[0]*2) :
-        logging.getLogger("HWR").info("phiy limits: %s" % str(phiy.getLimits()))
-        logging.getLogger("HWR").info(" requiring: %s" % str(z_echantillon_real + phiy.getPosition()))
-        logging.getLogger("HWR").error("loop too long")
-        centredPos = {}
-        move_motors(SAVED_INITIAL_POSITIONS)
-        raise Exception()
+            X.append(x)
+            Y.append(y)
+            PHI.append(phi.getPosition())
 
-    centred_pos = SAVED_INITIAL_POSITIONS.copy()
-    centred_pos.update({ sampx.motor: x_echantillon_real,
-                         sampy.motor: y_echantillon_real,
-                         phiy.motor: z_echantillon_real})
-    return centred_pos
+            if len(X) == n_points:
+                READY_FOR_NEXT_POINT.set()
+                break
+  
+            phi.syncMoveRelative(phi_incr)
+            READY_FOR_NEXT_POINT.set()
+  
+        if sample_type.upper()== "PLATE":
+            # make sure that final position is the same as initial one
+            phi.syncMoveRelative(half_range)
 
-  #except Exception, e:
-    #logging.getLogger("HWR").error("MiniDiffPX1: Centring error: %s" % e)
-  except: 
-    if diffract:
-        diffract.wait_user_end()
-    logging.getLogger("HWR").error("Exception. Centring aborted")
-    abort_centring()
-    return None
+        # CALCULATE
+        try:
+            for i in range(n_points):
+                xb  = X[i] - beam_xc
+                yb = Y[i] - beam_yc
+                ang = math.radians(PHI[i]+PhiCamera)
+
+                XB.append(xb); YB.append(yb); ANG.append(ang)
+
+            for i in range(n_points):
+                y0 = YB[i] ; a0 = ANG[i] 
+                if i < (n_points-1):
+                    y1 = YB[i+1] ; a1 = ANG[i+1]
+                else:
+                    y1 = YB[0] ; a1 = ANG[0]
+
+                p = (y0*math.sin(a1)-y1*math.sin(a0))/math.sin(a1-a0)        
+                q = (y0*math.cos(a1)-y1*math.cos(a0))/math.sin(a0-a1)        
+            
+                P.append(p);  Q.append(q)
+
+            x_echantillon = sum(P)/n_points
+            y_echantillon = sum(Q)/n_points
+            z_echantillon = -sum(XB)/n_points
+        except:
+            import traceback
+            logging.getLogger("HWR").info("error while centering: %s" % traceback.format_exc())
+
+
+        if diffract:
+            diffract.wait_user_finished()
+
+        x_echantillon_real=1000.*x_echantillon/pixelsPerMm_Hor + sampx.getPosition()
+        y_echantillon_real=1000.*y_echantillon/pixelsPerMm_Hor + sampy.getPosition()
+        z_echantillon_real=1000.*z_echantillon/pixelsPerMm_Hor + phiy.getPosition()
+
+        if (z_echantillon_real + phiy.getPosition() < phiy.getLimits()[0]*2) :
+            logging.getLogger("HWR").info("phiy limits: %s" % str(phiy.getLimits()))
+            logging.getLogger("HWR").info(" requiring: %s" % str(z_echantillon_real + phiy.getPosition()))
+            logging.getLogger("HWR").error("loop too long")
+            centredPos = {}
+            move_motors(SAVED_INITIAL_POSITIONS)
+            raise Exception()
+
+        centred_pos = SAVED_INITIAL_POSITIONS.copy()
+        centred_pos.update({ sampx.motor: x_echantillon_real,
+                             sampy.motor: y_echantillon_real,
+                             phiy.motor: z_echantillon_real})
+        return centred_pos
+
+    except: 
+        if diffract:
+            diffract.wait_user_end()
+        logging.getLogger("HWR").error("Exception. Centring aborted")
+        abort_centring()
+        return None
 
 def abort_centring():
     logging.getLogger("HWR").error("aborted")
@@ -349,6 +372,8 @@ def start_auto(camera,  centring_motors_dict,
                beam_xc, beam_yc,
                chi_angle = 0,
                n_points = 3,
+               phi_incr = 90,
+               sample_type = "LOOP",
                msg_cb=None,
                new_point_cb=None):    
     global CURRENT_CENTRING
@@ -362,7 +387,7 @@ def start_auto(camera,  centring_motors_dict,
                                     pixelsPerMm_Hor, pixelsPerMm_Ver, 
                                     beam_xc, beam_yc, 
                                     chi_angle,
-                                    n_points,
+                                    n_points, phi_incr, sample_type,
                                     msg_cb, new_point_cb)
     return CURRENT_CENTRING
 
@@ -404,14 +429,16 @@ def auto_center(camera,
                 pixelsPerMm_Hor, pixelsPerMm_Ver, 
                 beam_xc, beam_yc, 
                 chi_angle, 
-                n_points,
+                n_points, phi_incr, sample_type, 
                 msg_cb, new_point_cb):
+
     imgWidth = camera.getWidth()
     imgHeight = camera.getHeight()
  
     #check if loop is there at the beginning
     i = 0
     phipos=phi.getPosition()
+
     while -1 in find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb, phipos):
         phi.syncMoveRelative(90)
         i+=1
@@ -433,7 +460,7 @@ def auto_center(camera,
                                        pixelsPerMm_Hor, pixelsPerMm_Ver, 
                                        beam_xc, beam_yc, 
                                        chi_angle, 
-                                       n_points)
+                                       n_points, phi_incr, sample_type)
 
       for a in range(n_points):
             phiPosition=phi.getPosition()

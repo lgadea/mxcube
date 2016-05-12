@@ -796,6 +796,10 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
         reference_image_collection = char.reference_image_collection
         characterisation_parameters = char.characterisation_parameters
 
+        log = logging.getLogger("user_level_log")
+        self.use_edna = self.beamline_setup.configuration_hwobj.getUseEDNA()
+        log.info("using edna: %s" % self.use_edna)
+
         # Trick to make sure that the reference collection has a sample.
         reference_image_collection._parent = char.get_parent()
 
@@ -810,8 +814,10 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
         self.enqueue(dc_qe)
 
         log = logging.getLogger("user_level_log")
-        log.info("using edna: %s" % characterisation_parameters.use_edna)
-        if characterisation_parameters.use_edna:
+        self.use_edna = self.beamline_setup.configuration_hwobj.getUseEDNA()
+        log.info("using edna: %s" % self.use_edna)
+
+        if self.use_edna:
            char_qe = CharacterisationQueueEntry(self.get_view(), char,
                                              view_set_queue_entry=False)
            char_qe.set_enabled(True)
@@ -820,7 +826,7 @@ class CharacterisationGroupQueueEntry(BaseQueueEntry):
 
     def post_execute(self):
         char = self.get_data_model()
-        if char.characterisation_parameters.use_edna:
+        if self.use_edna:
             self.status = self.char_qe.status
         else:
             self.status = QUEUE_ENTRY_STATUS.SUCCESS
