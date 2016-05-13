@@ -12,7 +12,6 @@ import PyTango
 from HardwareRepository.TaskUtils import *
 from PX1Environment import EnvironmentPhase
 
-PHI_ANGLE_INCREMENT = 120
 
 @task
 def move_to_centred_position(centred_pos):
@@ -373,8 +372,7 @@ class MiniDiffPX1(MiniDiff):
           except:
             logging.exception("Could not move to centred position")
             self.emitCentringFailed()
-          else:
-            self.phiMotor.syncMoveRelative(-1*PHI_ANGLE_INCREMENT)
+          
           logging.info("EMITTING CENTRING SUCCESSFUL")
           self.centredTime = time.time()
           self.emitCentringSuccessful()

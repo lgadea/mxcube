@@ -72,15 +72,15 @@ def px1_center(phi, phiy,
                beam_xc, beam_yc,
                chi_angle,
                n_points,phi_incr,sample_type,diffract):
+                   
 
     global USER_CLICKED_EVENT
-
+    
+    PHI_ANGLE_START = phi.getPosition()
     PhiCamera=90
 
     X, Y, PHI = [], [], []
     P, Q, XB, YB, ANG = [], [], [], [], []
-
-    centredPosRel = {}
 
     if sample_type.upper() == "PLATE":
         # go back half of the total range 
@@ -114,16 +114,15 @@ def px1_center(phi, phiy,
             PHI.append(phi.getPosition())
 
             if len(X) == n_points:
+                PHI_LAST_ANGLE = phi.getPosition()
+                GO_ANGLE_START = PHI_ANGLE_START - PHI_LAST_ANGLE
                 READY_FOR_NEXT_POINT.set()
+                phi.syncMoveRelative(GO_ANGLE_START)
                 break
   
             phi.syncMoveRelative(phi_incr)
             READY_FOR_NEXT_POINT.set()
-  
-        if sample_type.upper()== "PLATE":
-            # make sure that final position is the same as initial one
-            phi.syncMoveRelative(half_range)
-
+            
         # CALCULATE
         try:
             for i in range(n_points):
@@ -164,7 +163,7 @@ def px1_center(phi, phiy,
             logging.getLogger("HWR").info("phiy limits: %s" % str(phiy.getLimits()))
             logging.getLogger("HWR").info(" requiring: %s" % str(z_echantillon_real + phiy.getPosition()))
             logging.getLogger("HWR").error("loop too long")
-            centredPos = {}
+            
             move_motors(SAVED_INITIAL_POSITIONS)
             raise Exception()
 
@@ -172,6 +171,8 @@ def px1_center(phi, phiy,
         centred_pos.update({ sampx.motor: x_echantillon_real,
                              sampy.motor: y_echantillon_real,
                              phiy.motor: z_echantillon_real})
+                             
+        
         return centred_pos
 
     except: 
