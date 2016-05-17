@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 from HardwareRepository.BaseHardwareObjects import Device
-import PyTango
+
 import logging
+try:
+    import PyTango
+    from PyTango.gevent import DeviceProxy
+except ImportError:
+    logging.getLogger('HWR').warning("Tango support is not available.")
 
 class MicroGlide(Device):
     def __init__(self, name):
@@ -11,7 +16,7 @@ class MicroGlide(Device):
             
         self.setIsReady(True)
 
-        self.device = PyTango.DeviceProxy( self.getProperty("tangoname"))
+        self.device = DeviceProxy( self.getProperty("tangoname"))
 
         stateChan = self.getChannelObject("state")
         stateChan.connectSignal("update", self.stateChanged)

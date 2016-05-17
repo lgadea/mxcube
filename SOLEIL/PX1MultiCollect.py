@@ -12,8 +12,14 @@ import subprocess
 import socket
 import re
 
-import PyTango
-from PyTango import DeviceProxy
+
+#import PyTango
+#from PyTango import DeviceProxy
+try:
+    import PyTango
+    from PyTango.gevent import DeviceProxy
+except ImportError:
+    logging.getLogger('HWR').warning("Tango support is not available.")
 from collections import namedtuple
 import SOLEILMergeImage as mergeImage
 
@@ -527,9 +533,9 @@ class PX1MultiCollect(AbstractMultiCollect, HardwareObject):
 
     def init(self):
 
-        self.collectServer = PyTango.DeviceProxy( self.getProperty("collectname"))
-        self.pilatusServer = PyTango.DeviceProxy( self.getProperty("pilatusname"))
-        self.fluoMotor =     PyTango.DeviceProxy( self.getProperty("fluomotor"))
+        self.collectServer = DeviceProxy( self.getProperty("collectname"))
+        self.pilatusServer = DeviceProxy( self.getProperty("pilatusname"))
+        self.fluoMotor =     DeviceProxy( self.getProperty("fluomotor"))
         self.close_safty_shutter = self.getProperty("close_safty_shutter") 
         
         self.collectServer.collectAxis = "Phi"

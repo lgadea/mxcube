@@ -8,7 +8,7 @@ import logging, time
 from MiniDiff import MiniDiff, myimage
 from HardwareRepository import HardwareRepository
 
-import PyTango
+#import PyTango
 from HardwareRepository.TaskUtils import *
 from PX1Environment import EnvironmentPhase
 

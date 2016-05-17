@@ -1,8 +1,14 @@
 from HardwareRepository import HardwareRepository
 from HardwareRepository.BaseHardwareObjects import Device
-
-import PyTango
 import logging
+
+try:
+    import PyTango
+    from PyTango.gevent import DeviceProxy
+except ImportError:
+    logging.getLogger('HWR').warning("Tango support is not available.")
+    
+
 
 class TangoMachCurrent(Device):
     def __init__(self, name):
@@ -12,7 +18,7 @@ class TangoMachCurrent(Device):
 
     def init(self):
             
-        self.device = PyTango.DeviceProxy(self.getProperty("tangoname"))
+        self.device = DeviceProxy(self.getProperty("tangoname"))
         self.setIsReady(True)
         stateChan = self.getChannelObject("current") # utile seulement si statechan n'est pas defini dans le code
         stateChan.connectSignal("update", self.valueChanged)
