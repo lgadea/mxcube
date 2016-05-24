@@ -114,10 +114,10 @@ def px1_center(phi, phiy,
             PHI.append(phi.getPosition())
 
             if len(X) == n_points:
-                PHI_LAST_ANGLE = phi.getPosition()
-                GO_ANGLE_START = PHI_ANGLE_START - PHI_LAST_ANGLE
+                #PHI_LAST_ANGLE = phi.getPosition()
+                #GO_ANGLE_START = PHI_ANGLE_START - PHI_LAST_ANGLE
                 READY_FOR_NEXT_POINT.set()
-                phi.syncMoveRelative(GO_ANGLE_START)
+                #phi.syncMoveRelative(GO_ANGLE_START)
                 break
   
             phi.syncMoveRelative(phi_incr)
@@ -168,7 +168,9 @@ def px1_center(phi, phiy,
             raise Exception()
 
         centred_pos = SAVED_INITIAL_POSITIONS.copy()
-        centred_pos.update({ sampx.motor: x_echantillon_real,
+        
+        centred_pos.update({ phi.motor: PHI_ANGLE_START,
+                             sampx.motor: x_echantillon_real,
                              sampy.motor: y_echantillon_real,
                              phiy.motor: z_echantillon_real})
                              
@@ -272,7 +274,6 @@ def move_motors(motor_positions_dict):
        xyz_togo[motname] = position
        moveXYZ = motor.getCommandObject("moveAbsoluteXYZ")
     else:
-       logging.getLogger("HWR").info("  moving motor %s to %s" % (motor,position))
        motor.move(position)
        logging.getLogger("HWR").info("  moving motor %s done" % (motor))
 
@@ -361,6 +362,7 @@ def end(centred_pos=None):
   if centred_pos is None:
       centred_pos = CURRENT_CENTRING.get()
   try:
+    
     move_motors(centred_pos)
   except:
     import traceback
@@ -376,7 +378,7 @@ def start_auto(camera,  centring_motors_dict,
                phi_incr = 90,
                sample_type = "LOOP",
                msg_cb=None,
-               new_point_cb=None):    
+               new_point_cb=None,diffract=None):    
     global CURRENT_CENTRING
 
     phi, phiy, sampx, sampy = prepare(centring_motors_dict)
@@ -389,7 +391,7 @@ def start_auto(camera,  centring_motors_dict,
                                     beam_xc, beam_yc, 
                                     chi_angle,
                                     n_points, phi_incr, sample_type,
-                                    msg_cb, new_point_cb)
+                                    msg_cb, new_point_cb,diffract)
     return CURRENT_CENTRING
 
 def find_loop(camera, pixelsPerMm_Hor, msg_cb, new_point_cb,phipos):
@@ -431,7 +433,7 @@ def auto_center(camera,
                 beam_xc, beam_yc, 
                 chi_angle, 
                 n_points, phi_incr, sample_type, 
-                msg_cb, new_point_cb):
+                msg_cb, new_point_cb,diffract=None):
 
     imgWidth = camera.getWidth()
     imgHeight = camera.getHeight()
@@ -461,7 +463,7 @@ def auto_center(camera,
                                        pixelsPerMm_Hor, pixelsPerMm_Ver, 
                                        beam_xc, beam_yc, 
                                        chi_angle, 
-                                       n_points, phi_incr, sample_type)
+                                       n_points, phi_incr, sample_type,diffract)
 
       for a in range(n_points):
             phiPosition=phi.getPosition()

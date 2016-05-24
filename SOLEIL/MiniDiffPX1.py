@@ -292,22 +292,19 @@ class MiniDiffPX1(MiniDiff):
 
    @task
    def moveToCentredPosition(self, cent_pos):
-       
        if not self.permit:
            logging.info("Trying to move gonio motors to a centred position. But no permit to operate")
            return
-
-       logging.getLogger("HWR").info("moveToCentredPosition")
-       logging.getLogger("HWR").info("     - %s " % str(cent_pos) )
-
        phipos = None
        if type(cent_pos) is dict:
            try:
                sampxpos = cent_pos[self.sampleXMotor]
                sampypos = cent_pos[self.sampleYMotor]
                phizpos = cent_pos[self.phizMotor]
-               if 'phi' in cent_pos.keys():
-                  phipos = cent_pos[self.phiMotor]
+               phipos = cent_pos[self.phiMotor]
+               #if 'phi' in cent_pos.keys():
+               #   logging.info("################################# moveToCentredPosition ########################")
+               #   phipos = cent_pos[self.phiMotor]
            except Exception, err:
                logging.error("MiniDiffPX1.moveToCentredPosition: %s" % err)
 	       raise Exception     
@@ -335,7 +332,6 @@ class MiniDiffPX1(MiniDiff):
        if self.phizMotor.motorIsMoving():
            """ no need to verify sampx, sampy as they are together with phiz in uglide """
            raise RuntimeError("Motors not ready")
-
        if phipos is not None:
            logging.info("WW1: phiMotor_move_to %s" % phipos)
            self.phiMotor.move( phipos )
@@ -367,7 +363,6 @@ class MiniDiffPX1(MiniDiff):
           self.emitProgressMessage("Moving sample to centred position...")
           self.emitCentringMoving()
           try:
-            logging.debug(str(motor_pos))
             self.moveToCentredPosition(motor_pos, wait = True)
           except:
             logging.exception("Could not move to centred position")
@@ -379,7 +374,7 @@ class MiniDiffPX1(MiniDiff):
           self.emitProgressMessage("")
 
    def zoomMotorPredefinedPositionChanged(self, positionName, offset):
-       logging.getLogger("HWR").info("<<<<<<MiniDiffPX1 zoomMotorPredefinedPositionChanged ")
+       logging.getLogger("HWR").info("MiniDiffPX1 zoomMotorPredefinedPositionChanged ")
        _calibration = self.getCalibrationData(self.zoomMotor.getPosition())
        if _calibration[0] and _calibration[1]:
            #logging.info("ZZ1: got calibration positions")
@@ -402,8 +397,6 @@ class MiniDiffPX1(MiniDiff):
        if not self.permit:
            logging.info("Trying to start centring in gonio. But no permit to operate")
            return
-           
-       logging.getLogger("HWR").info(">>>>>>>>>>>>>>MINIDIF PX1 start3ClickCentrin ")
        
        centring_points = self.px1conf_ho.getCentringPoints()       
        centring_phi_incr = self.px1conf_ho.getCentringPhiIncrement()       
@@ -459,7 +452,7 @@ class MiniDiffPX1(MiniDiff):
                                                                    self.getBeamPosX(), self.getBeamPosY(),
                                                                    n_points=centring_points, phi_incr=centring_phi_incr, sample_type=centring_sample_type,
                                                                    msg_cb=self.emitProgressMessage,
-                                                                   new_point_cb=lambda point: self.emit("newAutomaticCentringPoint", point))
+                                                                   new_point_cb=lambda point: self.emit("newAutomaticCentringPoint", point),diffract=self)
 
         self.currentCentringProcedure.link(self.autoCentringDone)
 
